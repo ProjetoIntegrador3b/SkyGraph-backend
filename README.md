@@ -244,3 +244,30 @@ DI providers themselves.
 
 Formatting is intentionally advisory: it reports unformatted files as PR
 annotations, but never blocks the merge.
+
+## Deployment
+
+The API is deployed on [Render](https://render.com) from the `Dockerfile`. The
+container binds to `$PORT` when the host provides one and falls back to `8000`
+locally, so the same image runs in both places.
+
+Deploys are **release-triggered, not push-triggered**: Auto-Deploy is off on the
+Render service, and `.github/workflows/deploy.yml` calls a Render deploy hook
+when a GitHub Release is published. The hook is pinned to the released commit,
+so merging to `main` never ships anything on its own.
+
+```bash
+gh release create v0.1.0 --generate-notes
+```
+
+Pre-releases (`v0.1.0-rc1`) are skipped by the workflow.
+
+Required repository secret:
+
+| Secret                   | Where to find it                                  |
+| ------------------------ | ------------------------------------------------- |
+| `RENDER_DEPLOY_HOOK_URL` | Render service → Settings → Deploy Hook (a secret) |
+
+Set the Render health check path to `/api/hello`, not `/api/health` — the latter
+returns 503 when Neo4j is unreachable, which would fail an otherwise healthy
+deploy.

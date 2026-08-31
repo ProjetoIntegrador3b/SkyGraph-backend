@@ -1,0 +1,33 @@
+name: Deploy
+
+# Production deploys happen only when a GitHub Release is published, never on a
+# push to main. Auto-Deploy must be turned OFF for the Render service so this
+# workflow is the single path to production.
+on:
+  release:
+    types: [published]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    name: Deploy to Render
+    # Pre-releases (e.g. v1.0.0-rc1) also fire "published"; skip them.
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+
+    steps:
+      # `ref` pins the deploy to the commit the release tag points at. Without
+      # it Render builds the branch head, which may already contain commits
+      # merged after the release was cut.
+      - name: Trigger Render deploy for the released commit
+        run: |
+          curl -fsS -X POST \
+            "${{ secrets.RENDER_DEPLOY_HOOK_URL }}&ref=${{ github.sha }}" \
+            -o response.json -w 'HTTP %{http_code}\n'
+          cat response.json
