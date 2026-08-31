@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router
 from app.core.config import Settings, get_settings
@@ -34,6 +35,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+
+    # The browser blocks cross-origin calls from the frontend unless the API
+    # says which origins it trusts. allow_credentials stays off because the API
+    # uses no cookies or auth headers yet; turn it on when authentication lands,
+    # and keep the origin list exact if you do.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origin_list,
+        allow_origin_regex=settings.cors_origin_regex or None,
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     app.include_router(router, prefix="/api")
     return app
 

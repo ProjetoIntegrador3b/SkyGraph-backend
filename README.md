@@ -198,6 +198,19 @@ Configuration comes from the environment; copy `.env.example` to `.env` and adju
 | `NEO4J_PASSWORD` | `skygraph`              | Password                   |
 | `NEO4J_DATABASE` | `neo4j`                 | Database name              |
 
+### CORS
+
+Browsers block cross-origin calls unless the API names the origins it trusts.
+
+| Variable            | Default                                                        | Meaning                             |
+| ------------------- | -------------------------------------------------------------- | ----------------------------------- |
+| `CORS_ORIGINS`      | localhost:5173, localhost:3000, `https://sky-graph-frontend.vercel.app` | Comma-separated allowed origins |
+| `CORS_ORIGIN_REGEX` | matches `sky-graph-frontend-*.vercel.app`                       | Allows Vercel preview deployments   |
+
+Credentials are disabled (`allow_credentials=False`) because the API uses no
+cookies or auth headers. When authentication is added, enable them and keep the
+origin list exact.
+
 ---
 
 ## Development
