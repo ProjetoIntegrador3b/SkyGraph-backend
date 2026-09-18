@@ -1,7 +1,7 @@
 # SkyGraph — Backend
 
-FastAPI service that computes **optimal flight routes between two airports** using a
-Neo4j graph database.
+FastAPI service that computes the **cheapest flight route between two airports**
+using a Neo4j graph database.
 
 Part of the SkyGraph system:
 
@@ -14,28 +14,36 @@ Part of the SkyGraph system:
 
 ## What the system does
 
-The user supplies an **origin** and a **destination** airport. The API searches the
-flight graph and returns the *optimal* route between them — which is not necessarily
-the shortest one in kilometres.
+The user supplies an **origin** airport, a **destination** airport and the travel
+dates. The API searches the flight graph and returns the **single cheapest route**
+between them — which is not necessarily the shortest one in kilometres.
 
 Airports are modelled as **nodes** and flights as **relationships** between them, so
-"find the best route" becomes a weighted graph traversal — the problem Neo4j is
+"find the cheapest route" becomes a weighted graph traversal — the problem Neo4j is
 built for, and the reason it was chosen over a relational database. Expressing the
 same query in SQL would require an arbitrary number of self-joins, one per
 connection.
 
-### Route weights
+### Route weight
 
-A route is scored against several factors rather than a single one:
+**Price is the only weight.** A route is scored on total ticket cost and nothing
+else:
 
-| Weight               | Meaning                                                |
-| -------------------- | ------------------------------------------------------ |
-| Price                | Total ticket cost across all legs                      |
-| Number of connections| Fewer stops is generally preferable                    |
-| Total time           | Flight duration plus time spent in layovers            |
+| Weight | Meaning                           |
+| ------ | --------------------------------- |
+| Price  | Total ticket cost across all legs |
 
-> The weighting model is the core of the project and is still being designed. The
-> API currently exposes only the hello-world and health endpoints described below.
+The number of connections and the total travel time are returned alongside the
+route as information about it, but they take **no** part in the scoring: the
+cheapest route wins even when it has more stops or takes longer.
+
+> **Scope note.** An earlier version of this plan scored routes against several
+> weights — price, number of connections and total time — and returned one result
+> per weight. That is no longer the design. There is one weight, one endpoint and
+> one result.
+
+> The API currently exposes only the hello-world and health endpoints described
+> below. The route endpoint is **not implemented yet**.
 
 ---
 
@@ -139,6 +147,35 @@ successfully even when Neo4j is not ready yet, and reports the problem through
 | GET    | `/api/health` | Neo4j connectivity; `200` when reachable, `503` when not         |
 
 Interactive OpenAPI docs: **http://localhost:8000/docs**
+
+### Planned route endpoint — not implemented yet
+
+A **single** endpoint serves the whole search. It takes the origin, the destination
+and the travel dates, and returns the one cheapest route. There is no parameter for
+choosing a weight, because price is the only one.
+
+| Method | Path          | Description                               |
+| ------ | ------------- | ----------------------------------------- |
+| POST   | `/api/routes` | Returns the cheapest route for the search |
+
+Request:
+
+```json
+{
+  "origin": "GRU",
+  "destination": "JFK",
+  "departureDate": "2030-06-10",
+  "returnDate": "2030-06-20"
+}
+```
+
+Response — `route` is `null` when no route is available for the search:
+
+```json
+{
+  "route": { "price": 450, "connections": 2, "duration": "8h 20min" }
+}
+```
 
 ---
 
