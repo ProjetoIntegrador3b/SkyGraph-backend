@@ -8,12 +8,13 @@ from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 
 from app.api.dependencies import GraphServiceDep, HelloServiceDep
-from app.api.routers import airports, flights
+from app.api.routers import airports, flights, routes
 from app.api.schemas import HealthResponse, HelloResponse
 
 router = APIRouter()
 router.include_router(airports.router)
 router.include_router(flights.router)
+router.include_router(routes.router)
 
 
 @router.get("/hello", tags=["hello"])

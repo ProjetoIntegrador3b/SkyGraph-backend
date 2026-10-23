@@ -10,11 +10,12 @@ from fastapi import Depends, Request
 from neo4j import AsyncDriver
 
 from app.core.config import Settings, get_settings
-from app.repositories import AirportRepository, FlightRepository
+from app.repositories import AirportRepository, FlightRepository, RouteRepository
 from app.services.airport import AirportService
 from app.services.flight import FlightService
 from app.services.graph import GraphService
 from app.services.hello import HelloService
+from app.services.route import RouteService
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
@@ -67,3 +68,17 @@ def get_flight_service(
 
 
 FlightServiceDep = Annotated[FlightService, Depends(get_flight_service)]
+
+
+def get_route_repository(driver: DriverDep, settings: SettingsDep) -> RouteRepository:
+    return RouteRepository(driver=driver, database=settings.neo4j_database)
+
+
+def get_route_service(
+    routes: Annotated[RouteRepository, Depends(get_route_repository)],
+    airports: Annotated[AirportRepository, Depends(get_airport_repository)],
+) -> RouteService:
+    return RouteService(routes=routes, airports=airports)
+
+
+RouteServiceDep = Annotated[RouteService, Depends(get_route_service)]

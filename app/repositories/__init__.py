@@ -2,5 +2,6 @@
 
 from app.repositories.airport import AirportRepository
 from app.repositories.flight import FlightRepository
+from app.repositories.route import RouteRepository
 
-__all__ = ["AirportRepository", "FlightRepository"]
+__all__ = ["AirportRepository", "FlightRepository", "RouteRepository"]

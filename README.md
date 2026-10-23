@@ -33,12 +33,12 @@ else:
 | ------ | --------------------------------- |
 | Price  | Total ticket cost across all legs |
 
-The number of connections and the total travel time are returned alongside the
-route as information about it, but they take **no** part in the scoring: the
-cheapest route wins even when it has more stops or takes longer.
+The number of connections and the travel dates are returned alongside the route
+as information about it, but they take **no** part in the scoring: the cheapest
+route wins even when it has more stops or takes longer.
 
-> The API currently exposes only the hello-world and health endpoints described
-> below. The route endpoint is **not implemented yet**.
+Only flights that **depart and arrive within the travel period** are used, and a
+connecting flight must depart on or after the day the previous one arrives.
 
 ---
 
@@ -113,7 +113,7 @@ suite swap in a fake graph service and run **without a database**.
 app/
 ├── api/
 │   ├── dependencies.py   # DI providers — the seam used by tests
-│   ├── routers/          # One router per resource: airports.py, flights.py
+│   ├── routers/          # One router per resource: airports, flights, routes
 │   ├── routes.py         # Hello + health handlers; includes the routers
 │   └── schemas.py        # Pydantic request/response models (camelCase JSON)
 ├── core/
@@ -126,16 +126,19 @@ app/
 │   ├── airport.py        # Airport — graph node, keyed by IATA code
 │   ├── filters.py        # Query filters for the list endpoints
 │   ├── flight.py         # Flight — priced relationship between airports
+│   ├── route.py          # RouteSearch (request) and Route (chain of flights)
 │   └── pagination.py     # PageParams (page, pageSize) and Page
 ├── repositories/         # The only data access
 │   ├── base.py           # BaseRepository — generic get/get_all/create/update/delete
 │   ├── airport.py        # AirportRepository — Airport nodes
-│   └── flight.py         # FlightRepository — FLIGHT relationships
+│   ├── flight.py         # FlightRepository — FLIGHT relationships
+│   └── route.py          # RouteRepository — cheapest-route Cypher search
 ├── services/
 │   ├── base.py           # BaseService — generic get/get_all/create/update/delete
 │   ├── airport.py        # AirportService
 │   ├── errors.py         # ServiceError and subclasses, mapped to their status codes
 │   ├── flight.py         # FlightService
+│   ├── route.py          # RouteService — route search
 │   ├── graph.py          # GraphService — connectivity check
 │   └── hello.py          # HelloService
 └── main.py               # create_app() + lifespan
@@ -195,6 +198,7 @@ small migration runner in `app/migrations`:
 | GET    | `/api/airports/{code}` | One airport by IATA code (any case); `404` if unknown   |
 | GET    | `/api/flights` | Flights, cheapest first; paginated and filterable (below)       |
 | GET    | `/api/flights/{uuid}` | One flight by uuid; `404` if unknown                     |
+| POST   | `/api/routes` | Cheapest route between two airports in a period (below)         |
 
 Interactive OpenAPI docs: **http://localhost:8000/docs**
 
@@ -237,34 +241,60 @@ with `page`/`pageSize`; an unknown or invalid one returns `422`.
 curl 'http://localhost:8000/api/flights?origin=GRU&maxPrice=1000&page=2&pageSize=20'
 ```
 
-### Planned route endpoint — not implemented yet
-
-A **single** endpoint serves the whole search. It takes the origin, the destination
-and the travel dates, and returns the one cheapest route. There is no parameter for
-choosing a weight, because price is the only one.
+### Route search
 
 | Method | Path          | Description                               |
 | ------ | ------------- | ----------------------------------------- |
-| POST   | `/api/routes` | Returns the cheapest route for the search |
+| POST   | `/api/routes` | The cheapest route for the search         |
 
-Request:
+A **single** endpoint serves the whole search. There is no parameter for choosing
+a weight, because price is the only one.
+
+Request — `departureDate` and `returnDate` delimit the travel period:
 
 ```json
 {
   "origin": "GRU",
-  "destination": "JFK",
-  "departureDate": "2030-06-10",
-  "returnDate": "2030-06-20"
+  "destination": "GIG",
+  "departureDate": "2027-01-10",
+  "returnDate": "2027-01-20"
 }
 ```
 
-Response — `route` is `null` when no route is available for the search:
+Response — `route` is `null` when no route fits the search:
 
 ```json
 {
-  "route": { "price": 450, "connections": 2, "duration": "8h 20min" }
+  "route": {
+    "price": 984.95,
+    "connections": 1,
+    "departureDate": "2027-01-11",
+    "arrivalDate": "2027-01-13",
+    "legs": [
+      { "uuid": "…", "price": 682.94, "origin": "GRU", "destination": "FOR",
+        "departureDate": "2027-01-11", "arrivalDate": "2027-01-11" },
+      { "uuid": "…", "price": 302.01, "origin": "FOR", "destination": "GIG",
+        "departureDate": "2027-01-12", "arrivalDate": "2027-01-13" }
+    ]
+  }
 }
 ```
+
+How the route is chosen:
+
+- Only flights that depart on or after `departureDate` and arrive on or before
+  `returnDate` are used.
+- Each connecting flight departs on or after the day the previous one arrives.
+- The route with the lowest total price wins; ties go to fewer flights, then the
+  earliest arrival.
+- Routes have at most 4 flights (3 connections), which bounds the search.
+
+The search is a single Cypher query (`app/repositories/route.py`): a quantified
+path pattern walks only the flights inside the period, so Neo4j never expands a
+flight that could not be used.
+
+Errors: an unknown airport returns `404`; the same airport twice, a `returnDate`
+before `departureDate`, or a missing field returns `422`.
 
 ---
 
