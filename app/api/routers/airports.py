@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from app.api.dependencies import AirportServiceDep
-from app.api.schemas import AirportResponse
+from app.api.schemas import AirportResponse, PageResponse
 from app.models import AirportFilters, IataCode
 
 router = APIRouter(prefix="/airports", tags=["airports"])
@@ -15,10 +15,10 @@ router = APIRouter(prefix="/airports", tags=["airports"])
 async def list_airports(
     service: AirportServiceDep,
     filters: Annotated[AirportFilters, Query()],
-) -> list[AirportResponse]:
-    """All airports, by code. Filters match exactly, ignoring case."""
-    airports = await service.get_all(filters)
-    return [AirportResponse.model_validate(airport) for airport in airports]
+) -> PageResponse[AirportResponse]:
+    """A page of airports, by code. Filters match exactly, ignoring case."""
+    page = await service.get_all(filters)
+    return PageResponse[AirportResponse].model_validate(page)
 
 
 @router.get("/{code}", responses={404: {"description": "Airport not found"}})

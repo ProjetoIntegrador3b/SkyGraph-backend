@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 
 from app.api.dependencies import get_flight_service
-from app.models import Flight, FlightFilters
+from app.models import Flight, FlightFilters, Page
 from app.services.errors import FlightNotFoundError
 from tests.factories import GRU_FOR
 
@@ -24,9 +24,11 @@ class FakeFlightService:
             raise FlightNotFoundError(uuid)
         return GRU_FOR
 
-    async def get_all(self, filters: FlightFilters) -> list[Flight]:
+    async def get_all(self, filters: FlightFilters) -> Page[Flight]:
         self.filters = filters
-        return [GRU_FOR]
+        return Page[Flight](
+            items=[GRU_FOR], page=filters.page, page_size=filters.page_size, total=1
+        )
 
 
 @pytest.fixture
@@ -72,7 +74,12 @@ async def test_list_flights(client: AsyncClient, service: FakeFlightService) -> 
     response = await client.get("/api/flights")
 
     assert response.status_code == 200
-    assert response.json() == [GRU_FOR_BODY]
+    assert response.json() == {
+        "items": [GRU_FOR_BODY],
+        "page": 1,
+        "pageSize": 50,
+        "total": 1,
+    }
     assert service.filters == FlightFilters()
 
 
@@ -105,6 +112,27 @@ async def test_list_flights_passes_the_filters(
     ],
 )
 async def test_list_flights_rejects_invalid_filters(
+    client: AsyncClient, service: FakeFlightService, params: dict[str, object]
+) -> None:
+    response = await client.get("/api/flights", params=params)
+
+    assert response.status_code == 422
+
+
+async def test_list_flights_passes_the_page(
+    client: AsyncClient, service: FakeFlightService
+) -> None:
+    response = await client.get("/api/flights", params={"page": 3, "pageSize": 20})
+
+    assert response.status_code == 200
+    assert (response.json()["page"], response.json()["pageSize"]) == (3, 20)
+    assert service.filters == FlightFilters(page=3, page_size=20)
+
+
+@pytest.mark.parametrize(
+    "params", [{"page": 0}, {"pageSize": 0}, {"pageSize": 201}, {"page": "x"}]
+)
+async def test_list_flights_rejects_invalid_pages(
     client: AsyncClient, service: FakeFlightService, params: dict[str, object]
 ) -> None:
     response = await client.get("/api/flights", params=params)

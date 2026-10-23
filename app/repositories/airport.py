@@ -11,7 +11,7 @@ class AirportRepository(BaseRepository[Airport, AirportFilters]):
     pattern = "(n:Airport)"
     key = "code"
     projection = "n {.*}"
-    order_by = "n.code"
+    order_by = "n.code"  # unique, so a total order for paging
     updatable = frozenset({"name", "city", "country", "latitude", "longitude"})
     create_query = "CREATE (n:Airport) SET n = $props"
 

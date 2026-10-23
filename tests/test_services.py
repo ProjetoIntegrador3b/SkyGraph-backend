@@ -6,7 +6,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from app.models import AirportFilters
+from app.models import AirportFilters, Page
 from app.services.airport import AirportService
 from app.services.errors import (
     AirportNotFoundError,
@@ -30,9 +30,11 @@ class FakeRepository:
     async def get(self, key: object) -> Any:
         return self.item
 
-    async def get_all(self, filters: Any) -> list[Any]:
+    async def get_all(self, filters: Any) -> Any:
         self.filters = filters
-        return [self.item]
+        return Page(
+            items=[self.item], page=filters.page, page_size=filters.page_size, total=1
+        )
 
     async def create(self, entity: Any) -> Any:
         return self.item
@@ -68,15 +70,10 @@ async def test_get_all_passes_the_filters() -> None:
     service = _airports(GRU)
     filters = AirportFilters(country="Brasil")
 
-    assert await service.get_all(filters) == [GRU]
+    page = await service.get_all(filters)
+
+    assert page.items == [GRU]
     assert service._repository.filters is filters  # type: ignore[attr-defined]
-
-
-async def test_get_all_without_filters() -> None:
-    service = _flights(GRU_FOR)
-
-    assert await service.get_all() == [GRU_FOR]
-    assert service._repository.filters is None  # type: ignore[attr-defined]
 
 
 async def test_create_returns_the_created_entity() -> None:

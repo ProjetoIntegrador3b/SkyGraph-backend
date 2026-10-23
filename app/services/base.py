@@ -6,11 +6,12 @@ turns that into a domain error, so callers always get an entity or an error.
 
 from pydantic import BaseModel
 
+from app.models import Page, PageParams
 from app.repositories.base import BaseRepository
 from app.services.errors import MissingReferenceError, NotFoundError
 
 
-class BaseService[M: BaseModel, F: BaseModel]:
+class BaseService[M: BaseModel, F: PageParams]:
     # Raised with the entity's key when it does not exist.
     not_found: type[NotFoundError]
 
@@ -23,7 +24,7 @@ class BaseService[M: BaseModel, F: BaseModel]:
             raise self.not_found(key)
         return entity
 
-    async def get_all(self, filters: F | None = None) -> list[M]:
+    async def get_all(self, filters: F) -> Page[M]:
         return await self._repository.get_all(filters)
 
     async def create(self, entity: M) -> M:

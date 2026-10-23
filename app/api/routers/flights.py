@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Query
 
 from app.api.dependencies import FlightServiceDep
-from app.api.schemas import FlightResponse
+from app.api.schemas import FlightResponse, PageResponse
 from app.models import FlightFilters
 
 router = APIRouter(prefix="/flights", tags=["flights"])
@@ -16,10 +16,10 @@ router = APIRouter(prefix="/flights", tags=["flights"])
 async def list_flights(
     service: FlightServiceDep,
     filters: Annotated[FlightFilters, Query()],
-) -> list[FlightResponse]:
-    """All flights, cheapest first. Price bounds are inclusive."""
-    flights = await service.get_all(filters)
-    return [FlightResponse.model_validate(flight) for flight in flights]
+) -> PageResponse[FlightResponse]:
+    """A page of flights, cheapest first. Price bounds are inclusive."""
+    page = await service.get_all(filters)
+    return PageResponse[FlightResponse].model_validate(page)
 
 
 @router.get("/{uuid}", responses={404: {"description": "Flight not found"}})

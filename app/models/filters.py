@@ -1,33 +1,25 @@
 """Filters for the list endpoints.
 
-Every field is optional; an unset field does not filter. Query parameters are
-camelCase on the wire (`minPrice`), like the rest of the API.
+Every field is optional; an unset field does not filter. Each filter model also
+carries the page to return. Query parameters are camelCase on the wire
+(`minPrice`, `pageSize`), like the rest of the API.
 """
 
 from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
-from pydantic.alias_generators import to_camel
+from pydantic import Field, model_validator
 
 from app.models.airport import IataCode
+from app.models.pagination import PageParams
 
 
-class _Filters(BaseModel):
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-        extra="forbid",
-        frozen=True,
-    )
-
-
-class AirportFilters(_Filters):
+class AirportFilters(PageParams):
     # Matched exactly, ignoring case.
     city: str | None = None
     country: str | None = None
 
 
-class FlightFilters(_Filters):
+class FlightFilters(PageParams):
     # Both bounds are inclusive.
     min_price: float | None = Field(default=None, ge=0)
     max_price: float | None = Field(default=None, ge=0)

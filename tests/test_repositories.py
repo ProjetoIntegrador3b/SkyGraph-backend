@@ -8,14 +8,18 @@ from typing import Any
 import pytest
 from neo4j import RoutingControl
 
-from app.models import AirportFilters, FlightFilters
+from app.models import Airport, AirportFilters, FlightFilters, Page
 from app.repositories import AirportRepository, FlightRepository
 from tests.factories import GRU, GRU_FOR
 
 
 class FakeDriver:
+    """Answers with `records`, or with their count for a `get_all` total query.
+    The last query is kept in `query`/`params`/`routing`, every one in `calls`."""
+
     def __init__(self, records: list[dict[str, Any]] | None = None) -> None:
         self.records = records or []
+        self.calls: list[tuple[str, dict[str, Any]]] = []
         self.query = ""
         self.params: dict[str, Any] = {}
         self.routing: RoutingControl | None = None
@@ -23,7 +27,10 @@ class FakeDriver:
     async def execute_query(
         self, query: str, params: dict[str, Any], **config: Any
     ) -> tuple:
+        self.calls.append((query, params))
         self.query, self.params, self.routing = query, params, config["routing_"]
+        if "AS total" in query:
+            return [{"total": len(self.records)}], None, None
         return self.records, None, None
 
 
@@ -58,13 +65,27 @@ async def test_get_returns_none_when_missing() -> None:
     assert await repository.get("XXX") is None
 
 
-async def test_get_all_without_filters_has_no_where_clause() -> None:
+async def test_get_all_returns_a_page_with_the_total() -> None:
     repository, driver = _airports(AIRPORT_ROW)
 
-    assert await repository.get_all() == [GRU]
-    assert "WHERE" not in driver.query
-    assert driver.query.endswith("ORDER BY n.code")
+    page = await repository.get_all(AirportFilters())
+
+    assert page == Page[Airport](items=[GRU], page=1, page_size=50, total=1)
+    (count_query, count_params), (items_query, items_params) = driver.calls
+    assert count_query == "MATCH (n:Airport) RETURN count(*) AS total"
+    assert items_query.endswith("ORDER BY n.code SKIP $skip LIMIT $limit")
+    assert count_params == {}
+    assert items_params == {"skip": 0, "limit": 50}
     assert driver.routing == RoutingControl.READ
+
+
+async def test_get_all_skips_to_the_requested_page() -> None:
+    repository, driver = _flights(FLIGHT_ROW)
+
+    page = await repository.get_all(FlightFilters(page=3, page_size=20))
+
+    assert (page.page, page.page_size) == (3, 20)
+    assert (driver.params["skip"], driver.params["limit"]) == (40, 20)
 
 
 async def test_get_all_only_sends_the_airport_filters_that_are_set() -> None:
@@ -72,21 +93,30 @@ async def test_get_all_only_sends_the_airport_filters_that_are_set() -> None:
 
     await repository.get_all(AirportFilters(country="Brasil"))
 
-    assert "toLower(n.country) = toLower($country)" in driver.query
-    assert "$city" not in driver.query
-    assert driver.params == {"country": "Brasil"}
+    for query, params in driver.calls:
+        assert "toLower(n.country) = toLower($country)" in query
+        assert "$city" not in query
+        assert params["country"] == "Brasil"
+        assert "city" not in params
 
 
-async def test_get_all_combines_the_flight_filters() -> None:
+async def test_get_all_combines_the_flight_filters_in_both_queries() -> None:
     repository, driver = _flights(FLIGHT_ROW)
     filters = FlightFilters(min_price=100, max_price=700, origin="gru")
 
-    assert await repository.get_all(filters) == [GRU_FOR]
-    assert (
-        "WHERE n.price >= $min_price AND n.price <= $max_price "
-        "AND origin.code = $origin" in driver.query
-    )
-    assert driver.params == {"min_price": 100, "max_price": 700, "origin": "GRU"}
+    page = await repository.get_all(filters)
+
+    assert page.items == [GRU_FOR]
+    for query, params in driver.calls:
+        assert (
+            "WHERE n.price >= $min_price AND n.price <= $max_price "
+            "AND origin.code = $origin" in query
+        )
+        assert {k: params[k] for k in ("min_price", "max_price", "origin")} == {
+            "min_price": 100,
+            "max_price": 700,
+            "origin": "GRU",
+        }
 
 
 async def test_create_sends_the_entity_and_returns_it() -> None:

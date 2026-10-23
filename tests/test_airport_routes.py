@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 
 from app.api.dependencies import get_airport_service
-from app.models import Airport, AirportFilters
+from app.models import Airport, AirportFilters, Page
 from app.services.errors import AirportNotFoundError
 from tests.factories import GRU
 
@@ -21,9 +21,11 @@ class FakeAirportService:
             raise AirportNotFoundError(code)
         return GRU
 
-    async def get_all(self, filters: AirportFilters) -> list[Airport]:
+    async def get_all(self, filters: AirportFilters) -> Page[Airport]:
         self.filters = filters
-        return [GRU]
+        return Page[Airport](
+            items=[GRU], page=filters.page, page_size=filters.page_size, total=1
+        )
 
 
 @pytest.fixture
@@ -79,7 +81,12 @@ async def test_list_airports(client: AsyncClient, service: FakeAirportService) -
     response = await client.get("/api/airports")
 
     assert response.status_code == 200
-    assert response.json() == [GRU_BODY]
+    assert response.json() == {
+        "items": [GRU_BODY],
+        "page": 1,
+        "pageSize": 50,
+        "total": 1,
+    }
     assert service.filters == AirportFilters()
 
 
@@ -100,3 +107,14 @@ async def test_list_airports_rejects_unknown_filters(
     response = await client.get("/api/airports", params={"state": "SP"})
 
     assert response.status_code == 422
+
+
+async def test_list_airports_passes_the_page_with_the_filters(
+    client: AsyncClient, service: FakeAirportService
+) -> None:
+    response = await client.get(
+        "/api/airports", params={"country": "Brasil", "page": 2, "pageSize": 10}
+    )
+
+    assert response.status_code == 200
+    assert service.filters == AirportFilters(country="Brasil", page=2, page_size=10)
