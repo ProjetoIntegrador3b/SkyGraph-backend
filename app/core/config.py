@@ -1,6 +1,7 @@
 """Application settings, loaded from the environment."""
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -15,6 +16,11 @@ class Settings(BaseSettings):
     neo4j_user: str = "neo4j"
     neo4j_password: str = "skygraph"
     neo4j_database: str = "neo4j"
+
+    # Apply pending migrations on startup, so a fresh deploy gets its data.
+    migrate_on_startup: bool = True
+    # Relative to the working directory: the repo root locally, /app in Docker.
+    seed_data_dir: Path = Path("initial_data_csv")
 
     # Comma-separated so the value can be edited in a hosting dashboard.
     # Covers the Vite dev server, the dockerised frontend, and production.

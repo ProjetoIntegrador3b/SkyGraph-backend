@@ -10,6 +10,8 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY app ./app
 RUN pip install --no-cache-dir .
+# Seed data loaded by the migrations on startup.
+COPY initial_data_csv ./initial_data_csv
 
 # Run as a non-root user.
 RUN useradd --create-home --uid 1000 appuser
