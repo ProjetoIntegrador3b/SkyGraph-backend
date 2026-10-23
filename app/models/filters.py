@@ -1,0 +1,45 @@
+"""Filters for the list endpoints.
+
+Every field is optional; an unset field does not filter. Query parameters are
+camelCase on the wire (`minPrice`), like the rest of the API.
+"""
+
+from typing import Self
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic.alias_generators import to_camel
+
+from app.models.airport import IataCode
+
+
+class _Filters(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class AirportFilters(_Filters):
+    # Matched exactly, ignoring case.
+    city: str | None = None
+    country: str | None = None
+
+
+class FlightFilters(_Filters):
+    # Both bounds are inclusive.
+    min_price: float | None = Field(default=None, ge=0)
+    max_price: float | None = Field(default=None, ge=0)
+    origin: IataCode | None = None
+    destination: IataCode | None = None
+
+    @model_validator(mode="after")
+    def _check_price_range(self) -> Self:
+        if (
+            self.min_price is not None
+            and self.max_price is not None
+            and self.min_price > self.max_price
+        ):
+            raise ValueError("minPrice must not be greater than maxPrice")
+        return self
