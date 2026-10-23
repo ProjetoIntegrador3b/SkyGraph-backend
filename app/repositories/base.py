@@ -12,8 +12,10 @@ from typing import Any
 from neo4j import AsyncDriver, Record, RoutingControl
 from pydantic import BaseModel
 
+from app.models import Page, PageParams
 
-class BaseRepository[M: BaseModel, F: BaseModel]:
+
+class BaseRepository[M: BaseModel, F: PageParams]:
     model: type[M]
     # MATCH pattern that binds the entity as `n`.
     pattern: str
@@ -40,16 +42,33 @@ class BaseRepository[M: BaseModel, F: BaseModel]:
         )
         return self._first(records)
 
-    async def get_all(self, filters: F | None = None) -> list[M]:
-        conditions, params = self._conditions(filters) if filters else ([], {})
-        where = f"WHERE {' AND '.join(conditions)} " if conditions else ""
-        records = await self._run(
-            f"MATCH {self.pattern} {where}"
-            f"RETURN {self.projection} AS item ORDER BY {self.order_by}",
+    async def get_all(self, filters: F) -> Page[M]:
+        """The page of entities that `filters` asks for. `order_by` must be a
+        total order, so pages neither overlap nor skip entities."""
+        conditions, params = self._conditions(filters)
+        match = f"MATCH {self.pattern} "
+        if conditions:
+            match += f"WHERE {' AND '.join(conditions)} "
+
+        totals = await self._run(
+            f"{match}RETURN count(*) AS total",
             routing=RoutingControl.READ,
             **params,
         )
-        return [self.model(**record["item"]) for record in records]
+        records = await self._run(
+            f"{match}RETURN {self.projection} AS item ORDER BY {self.order_by} "
+            "SKIP $skip LIMIT $limit",
+            routing=RoutingControl.READ,
+            skip=filters.skip,
+            limit=filters.page_size,
+            **params,
+        )
+        return Page[M](
+            items=[self.model(**record["item"]) for record in records],
+            page=filters.page,
+            page_size=filters.page_size,
+            total=totals[0]["total"],
+        )
 
     async def create(self, entity: M) -> M | None:
         """Return the created entity, or None when the query matched nothing to

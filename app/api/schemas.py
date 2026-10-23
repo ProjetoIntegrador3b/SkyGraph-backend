@@ -38,6 +38,14 @@ class AirportResponse(CamelModel):
     longitude: float
 
 
+class PageResponse[T](CamelModel):
+    items: list[T]
+    page: int
+    page_size: int
+    # Matching items across all pages.
+    total: int
+
+
 class FlightResponse(CamelModel):
     uuid: UUID
     price: float

@@ -14,7 +14,8 @@ class FlightRepository(BaseRepository[Flight, FlightFilters]):
         "{uuid: n.uuid, price: n.price, "
         "origin: origin.code, destination: destination.code}"
     )
-    # Cheapest first, since price is the weight routes are chosen by.
+    # Cheapest first, since price is the weight routes are chosen by; the uuid
+    # breaks ties, so paging sees a total order.
     order_by = "n.price, n.uuid"
     # The airports are the relationship's ends, not properties: moving a flight
     # means deleting it and creating another.

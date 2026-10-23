@@ -125,7 +125,8 @@ app/
 ├── models/
 │   ├── airport.py        # Airport — graph node, keyed by IATA code
 │   ├── filters.py        # Query filters for the list endpoints
-│   └── flight.py         # Flight — priced relationship between airports
+│   ├── flight.py         # Flight — priced relationship between airports
+│   └── pagination.py     # PageParams (page, pageSize) and Page
 ├── repositories/         # The only data access
 │   ├── base.py           # BaseRepository — generic get/get_all/create/update/delete
 │   ├── airport.py        # AirportRepository — Airport nodes
@@ -187,17 +188,38 @@ small migration runner in `app/migrations`:
 | ------ | ------------- | --------------------------------------------------------------- |
 | GET    | `/api/hello`  | Hello world — returns `{"message": "Hello SkyGraphers"}`         |
 | GET    | `/api/health` | Neo4j connectivity; `200` when reachable, `503` when not         |
-| GET    | `/api/airports` | All airports, sorted by code; filters below                    |
+| GET    | `/api/airports` | Airports, sorted by code; paginated and filterable (below)     |
 | GET    | `/api/airports/{code}` | One airport by IATA code (any case); `404` if unknown   |
-| GET    | `/api/flights` | All flights, cheapest first; filters below                      |
+| GET    | `/api/flights` | Flights, cheapest first; paginated and filterable (below)       |
 | GET    | `/api/flights/{uuid}` | One flight by uuid; `404` if unknown                     |
 
 Interactive OpenAPI docs: **http://localhost:8000/docs**
 
+### Pagination
+
+The list endpoints return one page at a time:
+
+| Parameter  | Default | Meaning                              |
+| ---------- | ------- | ------------------------------------ |
+| `page`     | `1`     | Page number, starting at 1           |
+| `pageSize` | `50`    | Items per page, from 1 to 200        |
+
+```json
+{
+  "items": [{ "uuid": "…", "price": 302.01, "origin": "GRU", "destination": "GIG" }],
+  "page": 1,
+  "pageSize": 50,
+  "total": 400
+}
+```
+
+`total` counts the matching items across all pages, after filters. A page past
+the end returns an empty `items` list.
+
 ### Filters
 
-All filters are optional query parameters and can be combined; an unknown or
-invalid one returns `422`.
+All filters are optional query parameters and can be combined with each other and
+with `page`/`pageSize`; an unknown or invalid one returns `422`.
 
 | Endpoint        | Parameter     | Matches                                         |
 | --------------- | ------------- | ----------------------------------------------- |
@@ -209,7 +231,7 @@ invalid one returns `422`.
 | `/api/flights`  | `destination` | IATA code of the arrival airport (any case)     |
 
 ```bash
-curl 'http://localhost:8000/api/flights?origin=GRU&maxPrice=1000'
+curl 'http://localhost:8000/api/flights?origin=GRU&maxPrice=1000&page=2&pageSize=20'
 ```
 
 ### Planned route endpoint — not implemented yet

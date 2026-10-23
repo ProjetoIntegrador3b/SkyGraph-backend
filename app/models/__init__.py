@@ -7,5 +7,14 @@ what the service layer works with; the API shapes them through `app.api.schemas`
 from app.models.airport import Airport, IataCode
 from app.models.filters import AirportFilters, FlightFilters
 from app.models.flight import Flight
+from app.models.pagination import Page, PageParams
 
-__all__ = ["Airport", "AirportFilters", "Flight", "FlightFilters", "IataCode"]
+__all__ = [
+    "Airport",
+    "AirportFilters",
+    "Flight",
+    "FlightFilters",
+    "IataCode",
+    "Page",
+    "PageParams",
+]
