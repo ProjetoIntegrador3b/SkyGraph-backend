@@ -37,11 +37,6 @@ The number of connections and the total travel time are returned alongside the
 route as information about it, but they take **no** part in the scoring: the
 cheapest route wins even when it has more stops or takes longer.
 
-> **Scope note.** An earlier version of this plan scored routes against several
-> weights — price, number of connections and total time — and returned one result
-> per weight. That is no longer the design. There is one weight, one endpoint and
-> one result.
-
 > The API currently exposes only the hello-world and health endpoints described
 > below. The route endpoint is **not implemented yet**.
 
