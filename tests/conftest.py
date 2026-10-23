@@ -35,6 +35,7 @@ def settings() -> Settings:
         neo4j_uri="bolt://test:7687",
         neo4j_user="neo4j",
         neo4j_password="test",
+        migrate_on_startup=False,
     )
 
 

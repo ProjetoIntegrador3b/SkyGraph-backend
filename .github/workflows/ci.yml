@@ -102,6 +102,19 @@ jobs:
           echo "--- /api/health ---"
           curl -sf http://localhost:8000/api/health
 
+      # The API applies migrations on startup; check they loaded the CSVs.
+      - name: Check the seed data was loaded
+        run: |
+          count() {
+            docker compose exec -T neo4j cypher-shell -u neo4j -p skygraph \
+              --format plain "$1" | tail -n 1
+          }
+          airports="$(count 'MATCH (a:Airport) RETURN count(a)')"
+          flights="$(count 'MATCH ()-[f:FLIGHT]->() RETURN count(f)')"
+          echo "airports=$airports flights=$flights"
+          test "$airports" -eq "$(($(wc -l < initial_data_csv/aeroportos.csv) - 1))"
+          test "$flights" -eq "$(($(wc -l < initial_data_csv/voos.csv) - 1))"
+
       - name: Dump logs on failure
         if: failure()
         run: docker compose logs --no-color

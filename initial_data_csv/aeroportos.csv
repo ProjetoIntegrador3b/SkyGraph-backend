@@ -1,0 +1,41 @@
+code,name,city,country,latitude,longitude
+GRU,Aeroporto Internacional de Guarulhos,São Paulo,Brasil,-23.4356,-46.4731
+CGH,Aeroporto de Congonhas,São Paulo,Brasil,-23.6261,-46.6564
+GIG,Aeroporto Internacional do Galeão,Rio de Janeiro,Brasil,-22.8100,-43.2506
+SDU,Aeroporto Santos Dumont,Rio de Janeiro,Brasil,-22.9105,-43.1631
+BSB,Aeroporto Internacional de Brasília,Brasília,Brasil,-15.8711,-47.9186
+CNF,Aeroporto Internacional de Confins,Belo Horizonte,Brasil,-19.6244,-43.9719
+SSA,Aeroporto Internacional de Salvador,Salvador,Brasil,-12.9086,-38.3225
+REC,Aeroporto Internacional do Recife,Recife,Brasil,-8.1265,-34.9236
+FOR,Aeroporto Internacional de Fortaleza,Fortaleza,Brasil,-3.7763,-38.5326
+POA,Aeroporto Internacional Salgado Filho,Porto Alegre,Brasil,-29.9944,-51.1714
+CWB,Aeroporto Internacional Afonso Pena,Curitiba,Brasil,-25.5285,-49.1758
+MAO,Aeroporto Internacional Eduardo Gomes,Manaus,Brasil,-3.0386,-60.0497
+BEL,Aeroporto Internacional de Belém,Belém,Brasil,-1.3793,-48.4763
+VCP,Aeroporto Internacional de Viracopos,Campinas,Brasil,-23.0074,-47.1345
+FLN,Aeroporto Internacional Hercílio Luz,Florianópolis,Brasil,-27.6703,-48.5525
+JFK,John F. Kennedy International Airport,Nova York,EUA,40.6413,-73.7781
+LAX,Los Angeles International Airport,Los Angeles,EUA,33.9416,-118.4085
+ORD,O'Hare International Airport,Chicago,EUA,41.9742,-87.9073
+ATL,Hartsfield-Jackson Atlanta International Airport,Atlanta,EUA,33.6407,-84.4277
+MIA,Miami International Airport,Miami,EUA,25.7959,-80.2870
+LHR,Heathrow Airport,Londres,Reino Unido,51.4700,-0.4543
+CDG,Aeroporto Charles de Gaulle,Paris,França,49.0097,2.5479
+FRA,Aeroporto de Frankfurt,Frankfurt,Alemanha,50.0379,8.5622
+AMS,Aeroporto de Amsterdã Schiphol,Amsterdã,Países Baixos,52.3105,4.7683
+MAD,Aeroporto Adolfo Suárez Madrid-Barajas,Madri,Espanha,40.4983,-3.5676
+LIS,Aeroporto Humberto Delgado,Lisboa,Portugal,38.7742,-9.1342
+FCO,Aeroporto Leonardo da Vinci-Fiumicino,Roma,Itália,41.8003,12.2389
+IST,Aeroporto de Istambul,Istambul,Turquia,41.2753,28.7519
+DXB,Aeroporto Internacional de Dubai,Dubai,Emirados Árabes Unidos,25.2532,55.3657
+DOH,Aeroporto Internacional Hamad,Doha,Catar,25.2731,51.6081
+HND,Aeroporto de Haneda,Tóquio,Japão,35.5494,139.7798
+PEK,Aeroporto Internacional de Pequim Capital,Pequim,China,40.0799,116.6031
+HKG,Aeroporto Internacional de Hong Kong,Hong Kong,China,22.3080,113.9185
+SIN,Aeroporto de Changi,Singapura,Singapura,1.3644,103.9915
+SYD,Aeroporto Kingsford Smith,Sydney,Austrália,-33.9399,151.1753
+JNB,Aeroporto Internacional O. R. Tambo,Joanesburgo,África do Sul,-26.1367,28.2411
+EZE,Aeroporto Internacional Ministro Pistarini,Buenos Aires,Argentina,-34.8222,-58.5358
+SCL,Aeroporto Internacional Arturo Merino Benítez,Santiago,Chile,-33.3930,-70.7858
+BOG,Aeroporto Internacional El Dorado,Bogotá,Colômbia,4.7016,-74.1469
+MEX,Aeroporto Internacional Benito Juárez,Cidade do México,México,19.4361,-99.0719

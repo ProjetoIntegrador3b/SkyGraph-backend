@@ -111,14 +111,21 @@ app/
 ├── api/
 │   ├── dependencies.py   # DI providers — the seam used by tests
 │   ├── routes.py         # HTTP handlers (thin)
-│   └── schemas.py        # Pydantic response models
+│   └── schemas.py        # Pydantic request/response models (camelCase JSON)
 ├── core/
 │   ├── config.py         # Settings loaded from the environment
 │   └── neo4j.py          # Driver creation and lifecycle
+├── migrations/           # Versioned Neo4j migrations, applied on startup
+│   ├── runner.py         # MIGRATIONS list + run_migrations()
+│   └── m000N_*.py        # One file per migration
+├── models/
+│   ├── airport.py        # Airport — graph node, keyed by IATA code
+│   └── flight.py         # Flight — priced relationship between airports
 ├── services/
 │   ├── graph.py          # GraphService — talks to Neo4j
 │   └── hello.py          # HelloService
 └── main.py               # create_app() + lifespan
+initial_data_csv/         # Seed data: aeroportos.csv, voos.csv
 tests/                    # pytest suite, database-free
 ```
 
@@ -131,6 +138,33 @@ on shutdown.
 Creating the driver does **not** open a connection. The API therefore starts
 successfully even when Neo4j is not ready yet, and reports the problem through
 `/api/health` instead of crash-looping.
+
+### Graph data and migrations
+
+Airports are `(:Airport {code, name, city, country, latitude, longitude})` nodes,
+keyed by IATA code. Flights are `(:Airport)-[:FLIGHT {uuid, price}]->(:Airport)`
+relationships, keyed by `uuid`.
+
+The data comes from `initial_data_csv/aeroportos.csv` and
+`initial_data_csv/voos.csv`. Alembic does not support Neo4j, so the project uses a
+small migration runner in `app/migrations`:
+
+| Migration                   | What it does                                          |
+| --------------------------- | ----------------------------------------------------- |
+| `0001_constraints`          | Uniqueness constraints on `Airport.code`, `FLIGHT.uuid` |
+| `0002_airports_and_flights` | Validates both CSVs through the models and loads them |
+
+- **When they run:** on every API startup, so a fresh deploy gets its data. If
+  Neo4j cannot be reached, the error is logged, the API starts anyway, and the
+  migrations are retried on the next start. Set `MIGRATE_ON_STARTUP=false` to
+  turn this off.
+- **By hand:** `.venv/bin/python -m app.migrations`.
+- **Run once:** each applied migration is recorded as a `(:SchemaMigration {id})`
+  node and skipped afterwards. Migrations use `MERGE` and `IF NOT EXISTS`, so
+  re-running one after a partial failure is safe.
+- **Changing data or schema:** add a new `m000N_*.py` file and append it to
+  `MIGRATIONS` in `runner.py`. Do not edit an applied migration — it will not run
+  again. Editing the CSVs alone therefore changes nothing in an existing database.
 
 ---
 
@@ -229,6 +263,8 @@ Configuration comes from the environment; copy `.env.example` to `.env` and adju
 | `NEO4J_USER`     | `neo4j`                 | Username                   |
 | `NEO4J_PASSWORD` | `skygraph`              | Password                   |
 | `NEO4J_DATABASE` | `neo4j`                 | Database name              |
+| `MIGRATE_ON_STARTUP` | `true`              | Apply pending migrations when the API starts |
+| `SEED_DATA_DIR`  | `initial_data_csv`      | Folder holding the seed CSVs, relative to the working directory |
 
 ### CORS
 
@@ -258,8 +294,9 @@ origin list exact.
 
 The suite uses FastAPI's `dependency_overrides` to replace `GraphService` with a
 fake, so tests are fast and need no database. Coverage includes the hello endpoint,
-the health endpoint in its reachable / unreachable / driver-raises states, and the
-DI providers themselves.
+the health endpoint in its reachable / unreachable / driver-raises states, the
+DI providers themselves, and the migration runner against a fake driver. The CI
+Docker job checks the migrations against a real Neo4j.
 
 ---
 

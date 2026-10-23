@@ -1,5 +1,6 @@
 """Application factory and startup/shutdown wiring."""
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -9,6 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
 from app.core.config import Settings, get_settings
 from app.core.neo4j import create_driver
+from app.migrations import run_migrations
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -16,10 +20,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Own the Neo4j driver for the lifetime of the process.
 
     Creating the driver does not open a connection, so startup does not fail
-    when the database is not up yet; /health reports that instead.
+    when the database is not up yet; /health reports that instead. Failed
+    migrations are logged rather than raised for the same reason, and are
+    retried on the next start.
     """
     settings: Settings = app.state.settings
     app.state.neo4j_driver = create_driver(settings)
+    if settings.migrate_on_startup:
+        try:
+            await run_migrations(app.state.neo4j_driver, settings)
+        except Exception:
+            logger.exception("Migrations failed; the API starts without them")
     try:
         yield
     finally:
