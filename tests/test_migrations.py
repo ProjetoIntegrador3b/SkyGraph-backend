@@ -109,14 +109,16 @@ async def test_all_migrations_send_the_seed_data(settings: Settings) -> None:
 
     await run_migrations(driver, settings)  # type: ignore[arg-type]
 
-    params = {key: value for _, p in driver.queries for key, value in p.items()}
-    assert len(params["airports"]) == 40
-    assert len(params["flights"]) == 400
-    assert params["flights"][0] == {
+    airports = next(p["airports"] for _, p in driver.queries if "airports" in p)
+    loaded, dated = (p["flights"] for _, p in driver.queries if "flights" in p)
+    assert len(airports) == 40
+    assert len(loaded) == len(dated) == 400
+    assert loaded[0]["uuid"] == "815ef6d1-3b8f-4a18-b7f8-a88b17fc695a"
+    assert loaded[0]["price"] == 682.94
+    assert dated[0] == {
         "uuid": "815ef6d1-3b8f-4a18-b7f8-a88b17fc695a",
-        "price": 682.94,
-        "origin": "GRU",
-        "destination": "FOR",
+        "departure_date": "2027-01-11",
+        "arrival_date": "2027-01-11",
     }
     assert driver.recorded() == [migration.id for migration in MIGRATIONS]
 

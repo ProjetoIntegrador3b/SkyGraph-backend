@@ -8,6 +8,7 @@ values travel as query parameters.
 """
 
 from typing import Any
+from uuid import UUID
 
 from neo4j import AsyncDriver, Record, RoutingControl
 from pydantic import BaseModel
@@ -75,7 +76,7 @@ class BaseRepository[M: BaseModel, F: PageParams]:
         attach it to (e.g. a flight whose airport does not exist)."""
         records = await self._run(
             f"{self.create_query} RETURN {self.projection} AS item",
-            props=entity.model_dump(mode="json"),
+            props=self._props(entity),
         )
         return self._first(records)
 
@@ -83,7 +84,7 @@ class BaseRepository[M: BaseModel, F: PageParams]:
         """Write the `updatable` properties of `entity`; None if it does not exist."""
         props = {
             name: value
-            for name, value in entity.model_dump(mode="json").items()
+            for name, value in self._props(entity).items()
             if name in self.updatable
         }
         records = await self._run(
@@ -107,6 +108,15 @@ class BaseRepository[M: BaseModel, F: PageParams]:
     def _conditions(self, filters: F) -> tuple[list[str], dict[str, Any]]:
         """WHERE conditions and their parameters for `get_all`; none by default."""
         return [], {}
+
+    @staticmethod
+    def _props(entity: BaseModel) -> dict[str, Any]:
+        """The entity as query parameters. Values stay native, so the driver
+        stores dates as Neo4j dates; UUIDs, which it cannot store, become text."""
+        return {
+            name: str(value) if isinstance(value, UUID) else value
+            for name, value in entity.model_dump().items()
+        }
 
     @staticmethod
     def _set_filters(

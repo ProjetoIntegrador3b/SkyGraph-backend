@@ -4,6 +4,7 @@ Route-related schemas use camelCase on the wire to match the frontend contract
 (`departureDate`, `returnDate`, ...), while staying snake_case in Python.
 """
 
+from datetime import date
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -51,3 +52,5 @@ class FlightResponse(CamelModel):
     price: float
     origin: str
     destination: str
+    departure_date: date
+    arrival_date: date
