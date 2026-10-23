@@ -2,7 +2,8 @@
 
 A route is a chain of flights. Only flights that depart and arrive within the
 period are used, and each flight must depart on or after the day the previous
-one arrives. Price is the only weight.
+one arrives. Either end of the period may be left open. Price is the only
+weight.
 """
 
 from datetime import date
@@ -30,15 +31,19 @@ class RouteSearch(BaseModel):
     origin: IataCode
     destination: IataCode
     # The period: every flight departs on or after departure_date and arrives
-    # on or before return_date.
-    departure_date: date
-    return_date: date
+    # on or before return_date. A missing date leaves that end open.
+    departure_date: date | None = None
+    return_date: date | None = None
 
     @model_validator(mode="after")
     def _check_consistency(self) -> Self:
         if self.origin == self.destination:
             raise ValueError("origin and destination must be different airports")
-        if self.return_date < self.departure_date:
+        if (
+            self.departure_date is not None
+            and self.return_date is not None
+            and self.return_date < self.departure_date
+        ):
             raise ValueError("returnDate must not be before departureDate")
         return self
 

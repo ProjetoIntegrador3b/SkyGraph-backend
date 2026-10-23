@@ -53,6 +53,12 @@ def test_route_search_allows_a_single_day() -> None:
     RouteSearch.model_validate(BODY | {"returnDate": "2027-01-10"})
 
 
+def test_route_search_dates_are_optional() -> None:
+    search = RouteSearch(origin="GRU", destination="GIG")
+
+    assert (search.departure_date, search.return_date) == (None, None)
+
+
 @pytest.mark.parametrize(
     ("change", "message"),
     [
@@ -112,6 +118,18 @@ async def test_repository_sends_the_search_and_maps_the_flights() -> None:
         "return_date": date(2027, 1, 20),
     }
     assert driver.config["routing_"] == RoutingControl.READ
+
+
+async def test_repository_sends_null_for_an_open_end() -> None:
+    driver = FakeDriver([])
+    search = RouteSearch(
+        origin="GRU", destination="GIG", departure_date=date(2027, 1, 10)
+    )
+
+    await RouteRepository(driver, "neo4j").find_cheapest(search)  # type: ignore[arg-type]
+
+    assert driver.params["departure_date"] == date(2027, 1, 10)
+    assert driver.params["return_date"] is None
 
 
 async def test_repository_returns_none_without_a_route() -> None:
@@ -260,11 +278,40 @@ async def test_endpoint_rejects_invalid_searches(
     assert service.search is None
 
 
-async def test_endpoint_requires_every_field(
-    client: AsyncClient, service: FakeRouteService
+@pytest.mark.parametrize("missing", ["origin", "destination"])
+async def test_endpoint_requires_both_airports(
+    client: AsyncClient, service: FakeRouteService, missing: str
 ) -> None:
-    body = {key: value for key, value in BODY.items() if key != "returnDate"}
+    body = {key: value for key, value in BODY.items() if key != missing}
 
     response = await client.post("/api/routes", json=body)
 
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("body", "departure", "arrival"),
+    [
+        ({"departureDate": "2027-01-10"}, date(2027, 1, 10), None),
+        ({"returnDate": "2027-01-20"}, None, date(2027, 1, 20)),
+        ({"departureDate": None, "returnDate": None}, None, None),
+        ({}, None, None),
+    ],
+)
+async def test_endpoint_accepts_open_periods(
+    client: AsyncClient,
+    service: FakeRouteService,
+    body: dict[str, Any],
+    departure: date | None,
+    arrival: date | None,
+) -> None:
+    airports = {"origin": "GRU", "destination": "GIG"}
+
+    response = await client.post("/api/routes", json=airports | body)
+
+    assert response.status_code == 200
+    assert service.search is not None
+    assert (service.search.departure_date, service.search.return_date) == (
+        departure,
+        arrival,
+    )

@@ -8,15 +8,18 @@ from neo4j import AsyncDriver, RoutingControl
 from app.models import MAX_FLIGHTS, Flight, Route, RouteSearch
 
 # The quantified path pattern only walks flights inside the period, so the
-# search never expands past one that could not be used. Connections are checked
+# search never expands past one that could not be used; a null date leaves
+# that end of the period open. Connections are checked
 # on the whole path: each flight departs on or after the previous one arrives
 # (remove that WHERE to allow any order). Prices are positive, so the cheapest
 # path never visits an airport twice. Ties go to the fewest flights, then the
 # earliest arrival.
 CHEAPEST = f"""
 MATCH (:Airport {{code: $origin}})
-      (()-[f:FLIGHT WHERE f.departure_date >= $departure_date
-                      AND f.arrival_date <= $return_date]->()){{1,{MAX_FLIGHTS}}}
+      (()-[f:FLIGHT WHERE ($departure_date IS NULL
+                           OR f.departure_date >= $departure_date)
+                      AND ($return_date IS NULL
+                           OR f.arrival_date <= $return_date)]->()){{1,{MAX_FLIGHTS}}}
       (:Airport {{code: $destination}})
 WHERE all(i IN range(0, size(f) - 2)
           WHERE f[i + 1].departure_date >= f[i].arrival_date)

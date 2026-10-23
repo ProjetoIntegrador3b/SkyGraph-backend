@@ -39,6 +39,7 @@ route wins even when it has more stops or takes longer.
 
 Only flights that **depart and arrive within the travel period** are used, and a
 connecting flight must depart on or after the day the previous one arrives.
+Either end of the period can be left open.
 
 ---
 
@@ -250,7 +251,8 @@ curl 'http://localhost:8000/api/flights?origin=GRU&maxPrice=1000&page=2&pageSize
 A **single** endpoint serves the whole search. There is no parameter for choosing
 a weight, because price is the only one.
 
-Request — `departureDate` and `returnDate` delimit the travel period:
+Request — `departureDate` and `returnDate` delimit the travel period. Both are
+optional: leave one out (or send `null`) to keep that end of the period open.
 
 ```json
 {
@@ -283,7 +285,9 @@ Response — `route` is `null` when no route fits the search:
 How the route is chosen:
 
 - Only flights that depart on or after `departureDate` and arrive on or before
-  `returnDate` are used.
+  `returnDate` are used. Without `departureDate` there is no earliest
+  departure; without `returnDate` there is no latest arrival; without either,
+  every flight is considered.
 - Each connecting flight departs on or after the day the previous one arrives.
 - The route with the lowest total price wins; ties go to fewer flights, then the
   earliest arrival.
@@ -294,7 +298,7 @@ path pattern walks only the flights inside the period, so Neo4j never expands a
 flight that could not be used.
 
 Errors: an unknown airport returns `404`; the same airport twice, a `returnDate`
-before `departureDate`, or a missing field returns `422`.
+before `departureDate`, or a missing airport returns `422`.
 
 ---
 
