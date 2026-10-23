@@ -3,13 +3,18 @@
 from neo4j import AsyncDriver
 
 from app.core.config import Settings
-from app.migrations import m0001_constraints, m0002_airports_and_flights
+from app.migrations import (
+    m0001_constraints,
+    m0002_airports_and_flights,
+    m0003_flight_dates,
+)
 from app.migrations.base import Migration
 
 # Append new migrations at the end; the order here is the order they run in.
 MIGRATIONS: list[Migration] = [
     m0001_constraints.migration,
     m0002_airports_and_flights.migration,
+    m0003_flight_dates.migration,
 ]
 
 

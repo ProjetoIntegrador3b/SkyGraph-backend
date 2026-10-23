@@ -1,5 +1,7 @@
 """Sample domain objects shared by the tests."""
 
+from datetime import date
+
 from app.models import Airport, Flight
 
 GRU = Airport(
@@ -16,4 +18,6 @@ GRU_FOR = Flight(
     price=682.94,
     origin="GRU",
     destination="FOR",
+    departure_date=date(2027, 1, 11),
+    arrival_date=date(2027, 1, 11),
 )

@@ -156,8 +156,10 @@ successfully even when Neo4j is not ready yet, and reports the problem through
 ### Graph data and migrations
 
 Airports are `(:Airport {code, name, city, country, latitude, longitude})` nodes,
-keyed by IATA code. Flights are `(:Airport)-[:FLIGHT {uuid, price}]->(:Airport)`
-relationships, keyed by `uuid`.
+keyed by IATA code. Flights are
+`(:Airport)-[:FLIGHT {uuid, price, departure_date, arrival_date}]->(:Airport)`
+relationships, keyed by `uuid`. The two days are Neo4j `DATE` values; a flight
+arrives on its departure day or later.
 
 The data comes from `initial_data_csv/aeroportos.csv` and
 `initial_data_csv/voos.csv`. Alembic does not support Neo4j, so the project uses a
@@ -167,6 +169,7 @@ small migration runner in `app/migrations`:
 | --------------------------- | ----------------------------------------------------- |
 | `0001_constraints`          | Uniqueness constraints on `Airport.code`, `FLIGHT.uuid` |
 | `0002_airports_and_flights` | Validates both CSVs through the models and loads them |
+| `0003_flight_dates`         | Sets each flight's `departure_date` and `arrival_date` from `voos.csv` |
 
 - **When they run:** on every API startup, so a fresh deploy gets its data. If
   Neo4j cannot be reached, the error is logged, the API starts anyway, and the

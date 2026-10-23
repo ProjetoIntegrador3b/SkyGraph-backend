@@ -3,6 +3,7 @@ the parameters sent, and the mapping of records back to models. The Cypher is
 checked against a real Neo4j by hand and in the CI Docker job.
 """
 
+from datetime import date
 from typing import Any
 
 import pytest
@@ -124,7 +125,17 @@ async def test_create_sends_the_entity_and_returns_it() -> None:
 
     assert await repository.create(GRU_FOR) == GRU_FOR
     assert driver.query.startswith(FlightRepository.create_query)
-    assert driver.params == {"props": GRU_FOR.model_dump(mode="json")}
+    # Dates stay native, so the driver stores them as Neo4j dates.
+    assert driver.params == {
+        "props": {
+            "uuid": str(GRU_FOR.uuid),
+            "price": GRU_FOR.price,
+            "origin": "GRU",
+            "destination": "FOR",
+            "departure_date": date(2027, 1, 11),
+            "arrival_date": date(2027, 1, 11),
+        }
+    }
     assert driver.routing == RoutingControl.WRITE
 
 
@@ -143,7 +154,16 @@ async def test_create_returns_none_when_nothing_was_created() -> None:
             "GRU",
             GRU.model_dump(exclude={"code"}),
         ),
-        (FlightRepository, GRU_FOR, str(GRU_FOR.uuid), {"price": GRU_FOR.price}),
+        (
+            FlightRepository,
+            GRU_FOR,
+            str(GRU_FOR.uuid),
+            {
+                "price": GRU_FOR.price,
+                "departure_date": GRU_FOR.departure_date,
+                "arrival_date": GRU_FOR.arrival_date,
+            },
+        ),
     ],
 )
 async def test_update_only_writes_the_updatable_properties(

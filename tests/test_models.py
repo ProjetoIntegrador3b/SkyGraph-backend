@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 from pydantic import ValidationError
 
@@ -24,6 +26,8 @@ def _flight(**overrides: object) -> Flight:
         "price": 682.94,
         "origin": "GRU",
         "destination": "FOR",
+        "departure_date": "2027-01-11",
+        "arrival_date": "2027-01-11",
     }
     return Flight(**(fields | overrides))
 
@@ -79,3 +83,22 @@ def test_flight_rejects_same_origin_and_destination() -> None:
 def test_flight_rejects_non_positive_price(price: float) -> None:
     with pytest.raises(ValidationError):
         _flight(price=price)
+
+
+def test_flight_parses_the_dates() -> None:
+    flight = _flight(arrival_date="2027-01-12")
+
+    assert (flight.departure_date, flight.arrival_date) == (
+        date(2027, 1, 11),
+        date(2027, 1, 12),
+    )
+
+
+def test_flight_rejects_arrival_before_departure() -> None:
+    with pytest.raises(ValidationError, match="must not be before departure_date"):
+        _flight(arrival_date="2027-01-10")
+
+
+def test_flight_requires_the_dates() -> None:
+    with pytest.raises(ValidationError):
+        Flight(uuid=FLIGHT_UUID, price=1, origin="GRU", destination="FOR")

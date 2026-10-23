@@ -10,20 +10,24 @@ class FlightRepository(BaseRepository[Flight, FlightFilters]):
     model = Flight
     pattern = "(origin:Airport)-[n:FLIGHT]->(destination:Airport)"
     key = "uuid"
+    # Dates are read back as ISO text, which the model parses.
     projection = (
         "{uuid: n.uuid, price: n.price, "
-        "origin: origin.code, destination: destination.code}"
+        "origin: origin.code, destination: destination.code, "
+        "departure_date: toString(n.departure_date), "
+        "arrival_date: toString(n.arrival_date)}"
     )
     # Cheapest first, since price is the weight routes are chosen by; the uuid
     # breaks ties, so paging sees a total order.
     order_by = "n.price, n.uuid"
     # The airports are the relationship's ends, not properties: moving a flight
     # means deleting it and creating another.
-    updatable = frozenset({"price"})
+    updatable = frozenset({"price", "departure_date", "arrival_date"})
     create_query = (
         "MATCH (origin:Airport {code: $props.origin}) "
         "MATCH (destination:Airport {code: $props.destination}) "
-        "CREATE (origin)-[n:FLIGHT {uuid: $props.uuid, price: $props.price}]"
+        "CREATE (origin)-[n:FLIGHT {uuid: $props.uuid, price: $props.price, "
+        "departure_date: $props.departure_date, arrival_date: $props.arrival_date}]"
         "->(destination)"
     )
 

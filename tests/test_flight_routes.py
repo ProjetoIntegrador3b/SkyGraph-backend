@@ -43,6 +43,8 @@ GRU_FOR_BODY = {
     "price": 682.94,
     "origin": "GRU",
     "destination": "FOR",
+    "departureDate": "2027-01-11",
+    "arrivalDate": "2027-01-11",
 }
 
 
