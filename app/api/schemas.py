@@ -7,7 +7,7 @@ Route-related schemas use camelCase on the wire to match the frontend contract
 from datetime import date
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 
@@ -54,3 +54,17 @@ class FlightResponse(CamelModel):
     destination: str
     departure_date: date
     arrival_date: date
+
+
+class RouteResponse(CamelModel):
+    price: float
+    connections: int
+    # First departure and last arrival.
+    departure_date: date
+    arrival_date: date
+    legs: list[FlightResponse] = Field(validation_alias="flights")
+
+
+class RouteSearchResponse(CamelModel):
+    # None when no route fits the search.
+    route: RouteResponse | None

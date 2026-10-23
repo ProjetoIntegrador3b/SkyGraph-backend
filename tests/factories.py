@@ -21,3 +21,12 @@ GRU_FOR = Flight(
     departure_date=date(2027, 1, 11),
     arrival_date=date(2027, 1, 11),
 )
+
+FOR_GIG = Flight(
+    uuid="0f3c2a1e-5b7d-4c9e-8a6f-1d2e3c4b5a69",
+    price=302.01,
+    origin="FOR",
+    destination="GIG",
+    departure_date=date(2027, 1, 12),
+    arrival_date=date(2027, 1, 13),
+)
