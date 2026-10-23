@@ -4,13 +4,15 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.routes import router
 from app.core.config import Settings, get_settings
 from app.core.neo4j import create_driver
 from app.migrations import run_migrations
+from app.services.errors import ServiceError
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +61,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.exception_handler(ServiceError)
+    async def service_error(request: Request, error: ServiceError) -> JSONResponse:
+        return JSONResponse(
+            status_code=error.status_code, content={"detail": str(error)}
+        )
 
     app.include_router(router, prefix="/api")
     return app

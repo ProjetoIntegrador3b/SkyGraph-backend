@@ -96,10 +96,13 @@ flowchart TB
 
 ### Request flow
 
-1. A route handler in `app/api/routes.py` declares what it needs (e.g. `GraphServiceDep`).
-2. FastAPI resolves that through the providers in `app/api/dependencies.py`.
-3. The provider builds a service, handing it the Neo4j driver taken from app state.
-4. The service runs the Cypher query and returns plain data; the handler shapes the response.
+1. A route handler declares the service it needs (e.g. `FlightServiceDep`).
+2. FastAPI resolves that through the providers in `app/api/dependencies.py`, which
+   build the repository from the Neo4j driver on app state and hand it to the service.
+3. The repository runs the Cypher query and returns domain models.
+4. The service applies the use case — e.g. raising `NotFoundError` (404) or
+   `MissingReferenceError` (422), which the app turns into responses — and the
+   handler shapes the models into response schemas.
 
 Handlers never touch the driver directly. That indirection is what lets the test
 suite swap in a fake graph service and run **without a database**.
@@ -110,7 +113,8 @@ suite swap in a fake graph service and run **without a database**.
 app/
 ├── api/
 │   ├── dependencies.py   # DI providers — the seam used by tests
-│   ├── routes.py         # HTTP handlers (thin)
+│   ├── routers/          # One router per resource: airports.py, flights.py
+│   ├── routes.py         # Hello + health handlers; includes the routers
 │   └── schemas.py        # Pydantic request/response models (camelCase JSON)
 ├── core/
 │   ├── config.py         # Settings loaded from the environment
@@ -120,9 +124,18 @@ app/
 │   └── m000N_*.py        # One file per migration
 ├── models/
 │   ├── airport.py        # Airport — graph node, keyed by IATA code
+│   ├── filters.py        # Query filters for the list endpoints
 │   └── flight.py         # Flight — priced relationship between airports
+├── repositories/         # The only data access
+│   ├── base.py           # BaseRepository — generic get/get_all/create/update/delete
+│   ├── airport.py        # AirportRepository — Airport nodes
+│   └── flight.py         # FlightRepository — FLIGHT relationships
 ├── services/
-│   ├── graph.py          # GraphService — talks to Neo4j
+│   ├── base.py           # BaseService — generic get/get_all/create/update/delete
+│   ├── airport.py        # AirportService
+│   ├── errors.py         # ServiceError and subclasses, mapped to their status codes
+│   ├── flight.py         # FlightService
+│   ├── graph.py          # GraphService — connectivity check
 │   └── hello.py          # HelloService
 └── main.py               # create_app() + lifespan
 initial_data_csv/         # Seed data: aeroportos.csv, voos.csv
@@ -174,8 +187,30 @@ small migration runner in `app/migrations`:
 | ------ | ------------- | --------------------------------------------------------------- |
 | GET    | `/api/hello`  | Hello world — returns `{"message": "Hello SkyGraphers"}`         |
 | GET    | `/api/health` | Neo4j connectivity; `200` when reachable, `503` when not         |
+| GET    | `/api/airports` | All airports, sorted by code; filters below                    |
+| GET    | `/api/airports/{code}` | One airport by IATA code (any case); `404` if unknown   |
+| GET    | `/api/flights` | All flights, cheapest first; filters below                      |
+| GET    | `/api/flights/{uuid}` | One flight by uuid; `404` if unknown                     |
 
 Interactive OpenAPI docs: **http://localhost:8000/docs**
+
+### Filters
+
+All filters are optional query parameters and can be combined; an unknown or
+invalid one returns `422`.
+
+| Endpoint        | Parameter     | Matches                                         |
+| --------------- | ------------- | ----------------------------------------------- |
+| `/api/airports` | `city`        | Exact city name, ignoring case                  |
+| `/api/airports` | `country`     | Exact country name, ignoring case               |
+| `/api/flights`  | `minPrice`    | Price at or above the value                     |
+| `/api/flights`  | `maxPrice`    | Price at or below the value; not below `minPrice` |
+| `/api/flights`  | `origin`      | IATA code of the departure airport (any case)   |
+| `/api/flights`  | `destination` | IATA code of the arrival airport (any case)     |
+
+```bash
+curl 'http://localhost:8000/api/flights?origin=GRU&maxPrice=1000'
+```
 
 ### Planned route endpoint — not implemented yet
 
@@ -295,7 +330,8 @@ origin list exact.
 The suite uses FastAPI's `dependency_overrides` to replace `GraphService` with a
 fake, so tests are fast and need no database. Coverage includes the hello endpoint,
 the health endpoint in its reachable / unreachable / driver-raises states, the
-DI providers themselves, and the migration runner against a fake driver. The CI
+DI providers themselves, the airport and flight routes, services and
+repositories, and the migration runner against a fake driver. The CI
 Docker job checks the migrations against a real Neo4j.
 
 ---
