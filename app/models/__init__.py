@@ -8,7 +8,7 @@ from app.models.airport import Airport, IataCode
 from app.models.filters import AirportFilters, FlightFilters
 from app.models.flight import Flight
 from app.models.pagination import Page, PageParams
-from app.models.route import MAX_FLIGHTS, Route, RouteSearch
+from app.models.route import Route, RouteSearch
 
 __all__ = [
     "Airport",
@@ -16,7 +16,6 @@ __all__ = [
     "Flight",
     "FlightFilters",
     "IataCode",
-    "MAX_FLIGHTS",
     "Page",
     "PageParams",
     "Route",

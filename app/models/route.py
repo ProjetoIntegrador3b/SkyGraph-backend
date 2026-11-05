@@ -3,7 +3,7 @@
 A route is a chain of flights. Only flights that depart and arrive within the
 period are used, and each flight must depart on or after the day the previous
 one arrives. Either end of the period may be left open. Price is the only
-weight.
+weight, and there is no limit on the number of connections.
 """
 
 from datetime import date
@@ -14,9 +14,6 @@ from pydantic.alias_generators import to_camel
 
 from app.models.airport import IataCode
 from app.models.flight import Flight
-
-# Longest route considered: 4 flights, 3 connections. Bounds the graph search.
-MAX_FLIGHTS = 4
 
 
 class RouteSearch(BaseModel):

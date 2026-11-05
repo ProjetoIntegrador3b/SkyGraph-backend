@@ -2,6 +2,7 @@
 
 from app.models import Route, RouteSearch
 from app.repositories import AirportRepository, RouteRepository
+from app.services.dijkstra import cheapest_route
 from app.services.errors import AirportNotFoundError
 
 
@@ -16,4 +17,6 @@ class RouteService:
         for code in (search.origin, search.destination):
             if await self._airports.get(code) is None:
                 raise AirportNotFoundError(code)
-        return await self._routes.find_cheapest(search)
+        flights = await self._routes.flights_in_period(search)
+        legs = cheapest_route(flights, search.origin, search.destination)
+        return Route(flights=legs) if legs else None

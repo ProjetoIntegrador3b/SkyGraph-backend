@@ -133,12 +133,13 @@ app/
 │   ├── base.py           # BaseRepository — generic get/get_all/create/update/delete
 │   ├── airport.py        # AirportRepository — Airport nodes
 │   ├── flight.py         # FlightRepository — FLIGHT relationships
-│   └── route.py          # RouteRepository — cheapest-route Cypher search
+│   └── route.py          # RouteRepository — flights in the search period
 ├── services/
 │   ├── base.py           # BaseService — generic get/get_all/create/update/delete
 │   ├── airport.py        # AirportService
 │   ├── errors.py         # ServiceError and subclasses, mapped to their status codes
 │   ├── flight.py         # FlightService
+│   ├── dijkstra.py       # Dijkstra on the time-expanded flight graph
 │   ├── route.py          # RouteService — route search
 │   ├── graph.py          # GraphService — connectivity check
 │   └── hello.py          # HelloService
@@ -289,13 +290,36 @@ How the route is chosen:
   departure; without `returnDate` there is no latest arrival; without either,
   every flight is considered.
 - Each connecting flight departs on or after the day the previous one arrives.
-- The route with the lowest total price wins; ties go to fewer flights, then the
-  earliest arrival.
-- Routes have at most 4 flights (3 connections), which bounds the search.
+- The route with the lowest total price wins, with any number of connections;
+  ties go to fewer flights, then the earliest arrival.
 
-The search is a single Cypher query (`app/repositories/route.py`): a quantified
-path pattern walks only the flights inside the period, so Neo4j never expands a
-flight that could not be used.
+### The algorithm: Dijkstra on a time-expanded graph
+
+1. **Neo4j** returns the flights inside the period (`app/repositories/route.py`,
+   one `MATCH` over the `FLIGHT` relationships).
+2. **Dijkstra** finds the cheapest route over them (`app/services/dijkstra.py`).
+
+Plain Dijkstra over airports is not enough here: it keeps only the cheapest way
+to reach each airport, which may land after the next flight has left. So the
+graph is expanded in time:
+
+| Graph element | Meaning                                                             |
+| ------------- | ------------------------------------------------------------------- |
+| Node          | An airport on a day when a flight departs from or lands at it       |
+| Flight edge   | (origin, departure day) → (destination, arrival day), weight = price |
+| Wait edge     | (airport, day) → (same airport, its next day), weight = 0           |
+
+Every path in this graph is a valid itinerary (no edge goes back in time) and
+every weight is non-negative, so Dijkstra returns the cheapest route exactly.
+The priority queue is ordered by price in whole cents, then number of flights,
+then day, which gives the tie-breaks above. With the seed data the graph has
+about 750 nodes and 1,100 edges. Dijkstra itself takes about 1 ms per search
+(at most a few ms); a whole request takes about 50 ms locally, most of it
+reading the flights from Neo4j, which now happens on every search.
+
+The implementation was checked against an exhaustive search on all 1,560
+airport pairs in five kinds of period (7,800 searches) with no difference in
+price, number of flights or arrival day.
 
 Errors: an unknown airport returns `404`; the same airport twice, a `returnDate`
 before `departureDate`, or a missing airport returns `422`.
