@@ -1,7 +1,6 @@
 """Route search tests: the model rules, the repository against a fake driver,
 the service against fake repositories, and the endpoint against a fake
-service. The Cypher search itself was checked against a brute-force search on
-a real Neo4j.
+service. Dijkstra itself is tested in test_dijkstra.py.
 """
 
 from collections.abc import Iterator
@@ -15,7 +14,7 @@ from neo4j import RoutingControl
 from pydantic import ValidationError
 
 from app.api.dependencies import get_route_service
-from app.models import Route, RouteSearch
+from app.models import Flight, Route, RouteSearch
 from app.repositories import RouteRepository
 from app.services.errors import AirportNotFoundError
 from app.services.route import RouteService
@@ -103,17 +102,14 @@ class FakeDriver:
         return self.records, None, None
 
 
-async def test_repository_sends_the_search_and_maps_the_flights() -> None:
-    flights = [flight.model_dump(mode="json") for flight in ROUTE.flights]
-    driver = FakeDriver([{"flights": flights}])
+async def test_repository_reads_the_flights_in_the_period() -> None:
+    driver = FakeDriver([{"flight": f.model_dump(mode="json")} for f in ROUTE.flights])
 
-    route = await RouteRepository(driver, "neo4j").find_cheapest(SEARCH)  # type: ignore[arg-type]
+    flights = await RouteRepository(driver, "neo4j").flights_in_period(SEARCH)  # type: ignore[arg-type]
 
-    assert route == ROUTE
+    assert flights == ROUTE.flights
     # Dates go as native dates, so they compare with the stored Neo4j dates.
     assert driver.params == {
-        "origin": "GRU",
-        "destination": "GIG",
         "departure_date": date(2027, 1, 10),
         "return_date": date(2027, 1, 20),
     }
@@ -126,29 +122,25 @@ async def test_repository_sends_null_for_an_open_end() -> None:
         origin="GRU", destination="GIG", departure_date=date(2027, 1, 10)
     )
 
-    await RouteRepository(driver, "neo4j").find_cheapest(search)  # type: ignore[arg-type]
+    await RouteRepository(driver, "neo4j").flights_in_period(search)  # type: ignore[arg-type]
 
     assert driver.params["departure_date"] == date(2027, 1, 10)
     assert driver.params["return_date"] is None
-
-
-async def test_repository_returns_none_without_a_route() -> None:
-    repository = RouteRepository(FakeDriver([]), "neo4j")  # type: ignore[arg-type]
-
-    assert await repository.find_cheapest(SEARCH) is None
 
 
 # --- service
 
 
 class FakeRoutes:
-    def __init__(self, route: Route | None) -> None:
-        self.route = route
+    """Hands the service a fixed set of flights, as Neo4j would."""
+
+    def __init__(self, flights: list[Flight]) -> None:
+        self.flights = flights
         self.search: RouteSearch | None = None
 
-    async def find_cheapest(self, search: RouteSearch) -> Route | None:
+    async def flights_in_period(self, search: RouteSearch) -> list[Flight]:
         self.search = search
-        return self.route
+        return self.flights
 
 
 class FakeAirports:
@@ -159,8 +151,8 @@ class FakeAirports:
         return None if code == self.missing else GRU
 
 
-async def test_service_returns_the_route() -> None:
-    routes = FakeRoutes(ROUTE)
+async def test_service_returns_the_cheapest_route_over_the_flights() -> None:
+    routes = FakeRoutes(ROUTE.flights)
     service = RouteService(routes, FakeAirports())  # type: ignore[arg-type]
 
     assert await service.find_cheapest(SEARCH) == ROUTE
@@ -168,14 +160,15 @@ async def test_service_returns_the_route() -> None:
 
 
 async def test_service_returns_none_without_a_route() -> None:
-    service = RouteService(FakeRoutes(None), FakeAirports())  # type: ignore[arg-type]
+    # Only the first leg: nothing reaches GIG.
+    service = RouteService(FakeRoutes([GRU_FOR]), FakeAirports())  # type: ignore[arg-type]
 
     assert await service.find_cheapest(SEARCH) is None
 
 
 @pytest.mark.parametrize("missing", ["GRU", "GIG"])
 async def test_service_rejects_unknown_airports(missing: str) -> None:
-    routes = FakeRoutes(ROUTE)
+    routes = FakeRoutes(ROUTE.flights)
     service = RouteService(routes, FakeAirports(missing))  # type: ignore[arg-type]
 
     with pytest.raises(AirportNotFoundError, match=f"Airport {missing} not found"):
