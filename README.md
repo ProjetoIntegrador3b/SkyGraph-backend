@@ -158,6 +158,30 @@ Creating the driver does **not** open a connection. The API therefore starts
 successfully even when Neo4j is not ready yet, and reports the problem through
 `/api/health` instead of crash-looping.
 
+### Flight prices
+
+Each flight's price comes from the great-circle distance between its airports,
+at rates in line with economy one-way fares in reais:
+
+| Distance          | Price                      |
+| ----------------- | -------------------------- |
+| Every flight      | R$ 180 in taxes and fees   |
+| First 1,000 km    | R$ 0,55 per km             |
+| 1,000 to 5,000 km | R$ 0,30 per km             |
+| Beyond 5,000 km   | R$ 0,28 per km             |
+
+For example, GRU → GIG (337 km) costs about R$ 365, GRU → JFK (7,664 km) about
+R$ 2.676 and GRU → PEK (17,578 km) about R$ 5.452.
+
+Real fares differ between flights on the same route, so each price is then
+multiplied by a factor between 0.8 and 1.2. The factor comes from the flight's
+`uuid`, so it is the same on every run. Without it, a connection could never be
+cheaper than a direct flight, because a detour is always longer.
+
+`voos.csv` holds these prices, and migration `0004_realistic_prices` applies
+them to a database loaded with the earlier ones. The formula lives in
+`app/migrations/m0004_realistic_prices.py`.
+
 ### Graph data and migrations
 
 Airports are `(:Airport {code, name, city, country, latitude, longitude})` nodes,
@@ -175,6 +199,7 @@ small migration runner in `app/migrations`:
 | `0001_constraints`          | Uniqueness constraints on `Airport.code`, `FLIGHT.uuid` |
 | `0002_airports_and_flights` | Validates both CSVs through the models and loads them |
 | `0003_flight_dates`         | Sets each flight's `departure_date` and `arrival_date` from `voos.csv` |
+| `0004_realistic_prices`     | Reprices every flight from its distance (see [Flight prices](#flight-prices)) |
 
 - **When they run:** on every API startup, so a fresh deploy gets its data. If
   Neo4j cannot be reached, the error is logged, the API starts anyway, and the
