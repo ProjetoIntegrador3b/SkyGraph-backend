@@ -16,8 +16,9 @@ from pydantic import ValidationError
 from app.api.dependencies import get_route_service
 from app.models import Flight, Route, RouteSearch
 from app.repositories import RouteRepository
+from app.services.dijkstra import DijkstraTrace, cheapest_route
 from app.services.errors import AirportNotFoundError
-from app.services.route import RouteService
+from app.services.route import RouteService, RouteTrace
 from tests.factories import FOR_GIG, GRU, GRU_FOR
 
 SEARCH = RouteSearch(
@@ -166,6 +167,30 @@ async def test_service_returns_none_without_a_route() -> None:
     assert await service.find_cheapest(SEARCH) is None
 
 
+async def test_service_traces_the_same_search() -> None:
+    routes = FakeRoutes(ROUTE.flights)
+    service = RouteService(routes, FakeAirports())  # type: ignore[arg-type]
+
+    result = await service.trace_cheapest(SEARCH)
+
+    assert result.route == ROUTE
+    assert result.flights == ROUTE.flights
+    assert result.trace.path == [
+        "GRU|2027-01-11",
+        "FOR|2027-01-11",
+        "FOR|2027-01-12",
+        "GIG|2027-01-13",
+    ]
+    assert routes.search is SEARCH
+
+
+async def test_service_trace_rejects_unknown_airports() -> None:
+    service = RouteService(FakeRoutes(ROUTE.flights), FakeAirports("GIG"))  # type: ignore[arg-type]
+
+    with pytest.raises(AirportNotFoundError):
+        await service.trace_cheapest(SEARCH)
+
+
 @pytest.mark.parametrize("missing", ["GRU", "GIG"])
 async def test_service_rejects_unknown_airports(missing: str) -> None:
     routes = FakeRoutes(ROUTE.flights)
@@ -189,6 +214,19 @@ class FakeRouteService:
         if search.origin == "XXX":
             raise AirportNotFoundError("XXX")
         return self.route
+
+    async def trace_cheapest(self, search: RouteSearch) -> RouteTrace:
+        self.search = search
+        if search.origin == "XXX":
+            raise AirportNotFoundError("XXX")
+        trace = DijkstraTrace()
+        legs = cheapest_route(ROUTE.flights, search.origin, search.destination, trace)
+        return RouteTrace(
+            search=search,
+            route=Route(flights=legs) if legs else None,
+            flights=ROUTE.flights,
+            trace=trace,
+        )
 
 
 @pytest.fixture
@@ -308,3 +346,75 @@ async def test_endpoint_accepts_open_periods(
         departure,
         arrival,
     )
+
+
+# --- trace endpoint
+
+
+async def test_trace_endpoint_returns_the_route_and_its_steps(
+    client: AsyncClient, service: FakeRouteService
+) -> None:
+    response = await client.post("/api/routes/trace", json=BODY)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["route"]["price"] == 984.95
+    trace = body["trace"]
+    assert (trace["origin"], trace["destination"]) == ("GRU", "GIG")
+    assert trace["start"] == "GRU|2027-01-11"
+    assert trace["nodes"][0] == {
+        "key": "GRU|2027-01-11",
+        "airport": "GRU",
+        "day": "2027-01-11",
+    }
+    assert trace["waits"] == [{"from": "FOR|2027-01-11", "to": "FOR|2027-01-12"}]
+    assert [flight["uuid"] for flight in trace["flights"]] == [
+        str(GRU_FOR.uuid),
+        str(FOR_GIG.uuid),
+    ]
+    assert trace["steps"][0] == {
+        "node": "GRU|2027-01-11",
+        "cents": 0,
+        "flights": 0,
+        "relaxed": [
+            {
+                "to": "FOR|2027-01-11",
+                "flight": str(GRU_FOR.uuid),
+                "cents": 68294,
+                "flights": 1,
+                "improved": True,
+            }
+        ],
+    }
+    assert trace["path"][-1] == "GIG|2027-01-13"
+    assert service.search == SEARCH
+
+
+async def test_trace_endpoint_unknown_airport(
+    client: AsyncClient, service: FakeRouteService
+) -> None:
+    response = await client.post("/api/routes/trace", json=BODY | {"origin": "XXX"})
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Airport XXX not found"}
+
+
+async def test_trace_endpoint_rejects_invalid_searches(
+    client: AsyncClient, service: FakeRouteService
+) -> None:
+    response = await client.post(
+        "/api/routes/trace", json=BODY | {"destination": "GRU"}
+    )
+
+    assert response.status_code == 422
+
+
+async def test_large_responses_are_compressed(
+    client: AsyncClient, service: FakeRouteService
+) -> None:
+    response = await client.post(
+        "/api/routes/trace", json=BODY, headers={"Accept-Encoding": "gzip"}
+    )
+
+    assert response.headers["content-encoding"] == "gzip"
+    assert response.json()["trace"]["start"] == "GRU|2027-01-11"

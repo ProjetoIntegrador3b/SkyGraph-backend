@@ -68,3 +68,52 @@ class RouteResponse(CamelModel):
 class RouteSearchResponse(CamelModel):
     # None when no route fits the search.
     route: RouteResponse | None
+
+
+# --- Route trace: the search step by step, for the graph explorer.
+# A node is "AIRPORT|YYYY-MM-DD"; prices are in whole cents, as the search
+# compares them.
+
+
+class TraceNodeResponse(CamelModel):
+    key: str
+    airport: str
+    day: date
+
+
+class TraceWaitResponse(CamelModel):
+    # "from" is a Python keyword.
+    from_: str = Field(alias="from")
+    to: str
+
+
+class TraceRelaxResponse(CamelModel):
+    to: str
+    # The uuid of the flight taken, or null for a wait at the same airport.
+    flight: UUID | None
+    cents: int
+    flights: int
+    improved: bool
+
+
+class TraceStepResponse(CamelModel):
+    node: str
+    cents: int
+    flights: int
+    relaxed: list[TraceRelaxResponse]
+
+
+class TraceResponse(CamelModel):
+    origin: str
+    destination: str
+    nodes: list[TraceNodeResponse]
+    flights: list[FlightResponse]
+    waits: list[TraceWaitResponse]
+    start: str | None
+    steps: list[TraceStepResponse]
+    path: list[str] | None
+
+
+class RouteTraceResponse(CamelModel):
+    route: RouteResponse | None
+    trace: TraceResponse

@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.routes import router
@@ -61,6 +62,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Route traces are a few hundred kilobytes of JSON; compressed they are a
+    # tenth of that. Small responses are left as they are.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
 
     @app.exception_handler(ServiceError)
     async def service_error(request: Request, error: ServiceError) -> JSONResponse:

@@ -3,7 +3,12 @@
 from fastapi import APIRouter
 
 from app.api.dependencies import RouteServiceDep
-from app.api.schemas import RouteResponse, RouteSearchResponse
+from app.api.schemas import (
+    RouteResponse,
+    RouteSearchResponse,
+    RouteTraceResponse,
+    TraceResponse,
+)
 from app.models import RouteSearch
 
 router = APIRouter(prefix="/routes", tags=["routes"])
@@ -19,4 +24,33 @@ async def find_cheapest_route(
     route = await service.find_cheapest(search)
     return RouteSearchResponse(
         route=RouteResponse.model_validate(route) if route else None
+    )
+
+
+@router.post("/trace", responses={404: {"description": "Airport not found"}})
+async def trace_cheapest_route(
+    service: RouteServiceDep, search: RouteSearch
+) -> RouteTraceResponse:
+    """The same search as `POST /routes`, with every step Dijkstra took: the
+    time-expanded graph (`nodes`, `flights` and `waits`), each node taken from
+    the priority queue with the edges it relaxed (`steps`), and the nodes of
+    the cheapest route (`path`). Used by the frontend's graph explorer."""
+    result = await service.trace_cheapest(search)
+    trace = TraceResponse.model_validate(
+        {
+            "origin": search.origin,
+            "destination": search.destination,
+            "nodes": result.trace.nodes,
+            "flights": result.flights,
+            "waits": [
+                {"from": wait.from_, "to": wait.to} for wait in result.trace.waits
+            ],
+            "start": result.trace.start,
+            "steps": result.trace.steps,
+            "path": result.trace.path,
+        }
+    )
+    return RouteTraceResponse(
+        route=RouteResponse.model_validate(result.route) if result.route else None,
+        trace=trace,
     )
