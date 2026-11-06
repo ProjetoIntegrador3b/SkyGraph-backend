@@ -18,7 +18,7 @@ from app.models import Flight, Route, RouteSearch
 from app.repositories import RouteRepository
 from app.services.dijkstra import DijkstraTrace, cheapest_route
 from app.services.errors import AirportNotFoundError
-from app.services.route import RouteService, RouteTrace
+from app.services.route import RouteList, RouteService, RouteTrace
 from tests.factories import FOR_GIG, GRU, GRU_FOR
 
 SEARCH = RouteSearch(
@@ -184,6 +184,24 @@ async def test_service_traces_the_same_search() -> None:
     assert routes.search is SEARCH
 
 
+async def test_service_lists_every_route_cheapest_first() -> None:
+    direct = GRU_FOR.model_copy(update={"destination": "GIG", "price": 2000.0})
+    routes = FakeRoutes([*ROUTE.flights, direct])
+    service = RouteService(routes, FakeAirports())  # type: ignore[arg-type]
+
+    result = await service.find_all(SEARCH)
+
+    assert result == RouteList(routes=[ROUTE, Route(flights=[direct])], truncated=False)
+    assert routes.search is SEARCH
+
+
+async def test_service_all_routes_rejects_unknown_airports() -> None:
+    service = RouteService(FakeRoutes(ROUTE.flights), FakeAirports("GIG"))  # type: ignore[arg-type]
+
+    with pytest.raises(AirportNotFoundError):
+        await service.find_all(SEARCH)
+
+
 async def test_service_trace_rejects_unknown_airports() -> None:
     service = RouteService(FakeRoutes(ROUTE.flights), FakeAirports("GIG"))  # type: ignore[arg-type]
 
@@ -214,6 +232,12 @@ class FakeRouteService:
         if search.origin == "XXX":
             raise AirportNotFoundError("XXX")
         return self.route
+
+    async def find_all(self, search: RouteSearch) -> RouteList:
+        self.search = search
+        if search.origin == "XXX":
+            raise AirportNotFoundError("XXX")
+        return RouteList(routes=[ROUTE] if self.route else [], truncated=False)
 
     async def trace_cheapest(self, search: RouteSearch) -> RouteTrace:
         self.search = search
@@ -346,6 +370,53 @@ async def test_endpoint_accepts_open_periods(
         departure,
         arrival,
     )
+
+
+# --- all routes endpoint
+
+
+async def test_all_routes_endpoint_lists_the_routes(
+    client: AsyncClient, service: FakeRouteService
+) -> None:
+    response = await client.post("/api/routes/all", json=BODY)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["truncated"] is False
+    assert [route["price"] for route in body["routes"]] == [984.95]
+    assert [leg["uuid"] for leg in body["routes"][0]["legs"]] == [
+        str(GRU_FOR.uuid),
+        str(FOR_GIG.uuid),
+    ]
+    assert body["routes"][0]["departureDate"] == "2027-01-11"
+    assert service.search == SEARCH
+
+
+async def test_all_routes_endpoint_is_empty_without_a_route(
+    client: AsyncClient, service: FakeRouteService
+) -> None:
+    service.route = None
+
+    response = await client.post("/api/routes/all", json=BODY)
+
+    assert response.json() == {"routes": [], "truncated": False}
+
+
+async def test_all_routes_endpoint_unknown_airport(
+    client: AsyncClient, service: FakeRouteService
+) -> None:
+    response = await client.post("/api/routes/all", json=BODY | {"origin": "XXX"})
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Airport XXX not found"}
+
+
+async def test_all_routes_endpoint_rejects_invalid_searches(
+    client: AsyncClient, service: FakeRouteService
+) -> None:
+    response = await client.post("/api/routes/all", json=BODY | {"destination": "GRU"})
+
+    assert response.status_code == 422
 
 
 # --- trace endpoint

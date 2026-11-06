@@ -70,6 +70,13 @@ class RouteSearchResponse(CamelModel):
     route: RouteResponse | None
 
 
+class RouteListResponse(CamelModel):
+    # Cheapest first; empty when no route fits the search.
+    routes: list[RouteResponse]
+    # True when there were more routes than the search lists.
+    truncated: bool
+
+
 # --- Route trace: the search step by step, for the graph explorer.
 # A node is "AIRPORT|YYYY-MM-DD"; prices are in whole cents, as the search
 # compares them.

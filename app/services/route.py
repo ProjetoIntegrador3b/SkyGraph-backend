@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from app.models import Flight, Route, RouteSearch
 from app.repositories import AirportRepository, RouteRepository
+from app.services.all_routes import all_routes
 from app.services.dijkstra import DijkstraTrace, cheapest_route
 from app.services.errors import AirportNotFoundError
 
@@ -17,6 +18,15 @@ class RouteTrace:
     # The flights the search ran on: those inside the period.
     flights: list[Flight]
     trace: DijkstraTrace
+
+
+@dataclass
+class RouteList:
+    """Every route of a search, cheapest first."""
+
+    routes: list[Route]
+    # True when the search stopped at its limit, so some routes are missing.
+    truncated: bool
 
 
 class RouteService:
@@ -41,6 +51,16 @@ class RouteService:
             route=Route(flights=legs) if legs else None,
             flights=flights,
             trace=trace,
+        )
+
+    async def find_all(self, search: RouteSearch) -> RouteList:
+        """Every route that fits the search, cheapest first. The first one is
+        the route `find_cheapest` returns."""
+        flights = await self._flights_for(search)
+        result = all_routes(flights, search.origin, search.destination)
+        return RouteList(
+            routes=[Route(flights=legs) for legs in result.routes],
+            truncated=result.truncated,
         )
 
     async def _flights_for(self, search: RouteSearch) -> list[Flight]:

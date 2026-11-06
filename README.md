@@ -227,6 +227,7 @@ small migration runner in `app/migrations`:
 | GET    | `/api/flights/{uuid}` | One flight by uuid; `404` if unknown                     |
 | POST   | `/api/routes` | Cheapest route between two airports in a period (below)         |
 | POST   | `/api/routes/trace` | The same search with every Dijkstra step (below)          |
+| POST   | `/api/routes/all` | Every route for the same search, cheapest first (below)     |
 
 Interactive OpenAPI docs: **http://localhost:8000/docs**
 
@@ -349,6 +350,33 @@ price, number of flights or arrival day.
 
 Errors: an unknown airport returns `404`; the same airport twice, a `returnDate`
 before `departureDate`, or a missing airport returns `422`.
+
+### All routes
+
+| Method | Path              | Description                                  |
+| ------ | ----------------- | -------------------------------------------- |
+| POST   | `/api/routes/all` | Every route for the search, cheapest first   |
+
+It takes the same request as `POST /api/routes`. A route here follows the same
+rules (each flight departs on or after the day the previous one lands) and never
+passes through the same airport twice. Ties go to fewer flights, then the
+earliest arrival, so the first route is the one `POST /api/routes` returns.
+
+```json
+{
+  "routes": [
+    { "price": 984.95, "connections": 1, "departureDate": "2027-01-11",
+      "arrivalDate": "2027-01-13", "legs": [ ... ] }
+  ],
+  "truncated": false
+}
+```
+
+The routes are found by a depth-first search (`app/services/all_routes.py`). On
+the seed data a pair of airports has up to about 2,200 routes (VCP to EZE),
+about 190 KB of gzip-compressed JSON. The search stops at 5,000 routes; when it
+does, `truncated` is `true` and the list may miss cheaper routes. The errors are
+the same as `POST /api/routes`. The frontend's "Ver todas as rotas" list uses it.
 
 ### Route trace
 
