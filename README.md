@@ -201,6 +201,7 @@ small migration runner in `app/migrations`:
 | GET    | `/api/flights` | Flights, cheapest first; paginated and filterable (below)       |
 | GET    | `/api/flights/{uuid}` | One flight by uuid; `404` if unknown                     |
 | POST   | `/api/routes` | Cheapest route between two airports in a period (below)         |
+| POST   | `/api/routes/trace` | The same search with every Dijkstra step (below)          |
 
 Interactive OpenAPI docs: **http://localhost:8000/docs**
 
@@ -323,6 +324,59 @@ price, number of flights or arrival day.
 
 Errors: an unknown airport returns `404`; the same airport twice, a `returnDate`
 before `departureDate`, or a missing airport returns `422`.
+
+### Route trace
+
+| Method | Path                | Description                                   |
+| ------ | ------------------- | --------------------------------------------- |
+| POST   | `/api/routes/trace` | The same search, with every step Dijkstra took |
+
+It takes the same request as `POST /api/routes` and answers with the same
+`route`, plus a `trace` of the search. The frontend's graph explorer uses it to
+replay the search step by step. Nodes are named `"AIRPORT|YYYY-MM-DD"`, and
+prices are whole cents, as the search compares them.
+
+```json
+{
+  "route": { "price": 984.95, "connections": 1, "legs": ["…"] },
+  "trace": {
+    "origin": "GRU",
+    "destination": "GIG",
+    "nodes": [{ "key": "GRU|2027-01-11", "airport": "GRU", "day": "2027-01-11" }],
+    "flights": [{ "uuid": "…", "price": 682.94, "origin": "GRU", "destination": "FOR", "…": "…" }],
+    "waits": [{ "from": "FOR|2027-01-11", "to": "FOR|2027-01-12" }],
+    "start": "GRU|2027-01-11",
+    "steps": [
+      {
+        "node": "GRU|2027-01-11",
+        "cents": 0,
+        "flights": 0,
+        "relaxed": [
+          { "to": "FOR|2027-01-11", "flight": "…", "cents": 68294, "flights": 1, "improved": true }
+        ]
+      }
+    ],
+    "path": ["GRU|2027-01-11", "FOR|2027-01-11", "FOR|2027-01-12", "GIG|2027-01-13"]
+  }
+}
+```
+
+- **The graph:** `nodes` are the airport-days, `flights` the flights inside the
+  period (the edges with a price) and `waits` the free edges between days at
+  the same airport.
+- **The steps:** `steps` lists, in order, each node taken from the priority
+  queue with its final label, and the edges it relaxed. In each edge, `flight`
+  is the uuid of the flight or null for a wait, and `improved` says whether it
+  lowered the neighbour's label.
+- **The result:** `path` holds the nodes of the cheapest route, waits included,
+  or null when none exists. `start` is null when the origin has no flight in
+  the period.
+
+Recording runs the same `cheapest_route` (`app/services/dijkstra.py`) through
+an optional argument, so the trace is exactly what `POST /api/routes` computes.
+With the full seed data a trace is about 220 KB of JSON, so responses over 1
+KB are gzip-compressed (about 35 KB for that trace). The errors are the same as
+for the route search.
 
 ---
 

@@ -8,7 +8,7 @@ from datetime import date
 from uuid import uuid4
 
 from app.models import Flight
-from app.services.dijkstra import cheapest_route
+from app.services.dijkstra import DijkstraTrace, cheapest_route
 
 
 def flight(
@@ -130,3 +130,98 @@ def test_none_without_a_route() -> None:
     assert cheapest_route([flight("GRU", "MIA", 900, 5)], "GRU", "JFK") is None
     assert cheapest_route([flight("MIA", "JFK", 900, 5)], "GRU", "JFK") is None
     assert cheapest_route([], "GRU", "JFK") is None
+
+
+# --- trace
+
+
+def test_tracing_does_not_change_the_route() -> None:
+    flights = [
+        flight("GRU", "JFK", 3000, 5),
+        flight("GRU", "MIA", 900, 5),
+        flight("MIA", "JFK", 400, 7),
+    ]
+    trace = DijkstraTrace()
+
+    assert cheapest_route(flights, "GRU", "JFK", trace) == cheapest_route(
+        flights, "GRU", "JFK"
+    )
+
+
+def test_trace_records_the_graph_and_every_step() -> None:
+    to_mia = flight("GRU", "MIA", 900, 5)
+    to_jfk = flight("MIA", "JFK", 400, 7)
+    trace = DijkstraTrace()
+
+    cheapest_route([to_mia, to_jfk], "GRU", "JFK", trace)
+
+    assert {node.key for node in trace.nodes} == {
+        "GRU|2027-01-05",
+        "MIA|2027-01-05",
+        "MIA|2027-01-07",
+        "JFK|2027-01-07",
+    }
+    # Waiting at MIA from the landing day to the next departure.
+    assert [(w.from_, w.to) for w in trace.waits] == [
+        ("MIA|2027-01-05", "MIA|2027-01-07")
+    ]
+    assert trace.start == "GRU|2027-01-05"
+    assert [(s.node, s.cents, s.flights) for s in trace.steps] == [
+        ("GRU|2027-01-05", 0, 0),
+        ("MIA|2027-01-05", 90000, 1),
+        ("MIA|2027-01-07", 90000, 1),
+        ("JFK|2027-01-07", 130000, 2),
+    ]
+    first = trace.steps[0].relaxed[0]
+    assert (first.to, first.flight, first.cents, first.improved) == (
+        "MIA|2027-01-05",
+        to_mia.uuid,
+        90000,
+        True,
+    )
+    # The wait is an edge without a flight.
+    assert trace.steps[1].relaxed[0].flight is None
+    assert trace.path == [
+        "GRU|2027-01-05",
+        "MIA|2027-01-05",
+        "MIA|2027-01-07",
+        "JFK|2027-01-07",
+    ]
+
+
+def test_trace_marks_edges_that_do_not_improve() -> None:
+    # The direct flight reaches JFK first; the connection is dearer.
+    trace = DijkstraTrace()
+
+    cheapest_route(
+        [
+            flight("GRU", "JFK", 500, 5),
+            flight("GRU", "MIA", 100, 5),
+            flight("MIA", "JFK", 900, 5),
+        ],
+        "GRU",
+        "JFK",
+        trace,
+    )
+
+    mia = next(step for step in trace.steps if step.node == "MIA|2027-01-05")
+    assert [(edge.to, edge.improved) for edge in mia.relaxed] == [
+        ("JFK|2027-01-05", False)
+    ]
+
+
+def test_trace_of_a_search_without_a_route() -> None:
+    trace = DijkstraTrace()
+
+    assert cheapest_route([flight("GRU", "MIA", 900, 5)], "GRU", "JFK", trace) is None
+    assert trace.path is None
+    assert len(trace.steps) == 2
+
+
+def test_trace_when_the_origin_has_no_flights() -> None:
+    trace = DijkstraTrace()
+
+    cheapest_route([flight("MIA", "JFK", 400, 5)], "GRU", "JFK", trace)
+
+    assert trace.start is None
+    assert trace.steps == []
