@@ -15,6 +15,12 @@ from app.core.config import Settings
 from app.main import create_app
 from app.migrations import MIGRATIONS, Migration, run_migrations
 from app.migrations.m0002_airports_and_flights import read_airports, read_flights
+from app.migrations.m0004_realistic_prices import (
+    base_price,
+    distance_km,
+    realistic_price,
+    variation,
+)
 
 CSV_DIR = Path(__file__).resolve().parents[1] / "initial_data_csv"
 
@@ -110,17 +116,83 @@ async def test_all_migrations_send_the_seed_data(settings: Settings) -> None:
     await run_migrations(driver, settings)  # type: ignore[arg-type]
 
     airports = next(p["airports"] for _, p in driver.queries if "airports" in p)
-    loaded, dated = (p["flights"] for _, p in driver.queries if "flights" in p)
+    loaded, dated, priced = (p["flights"] for _, p in driver.queries if "flights" in p)
     assert len(airports) == 40
-    assert len(loaded) == len(dated) == 400
+    assert len(loaded) == len(dated) == len(priced) == 400
     assert loaded[0]["uuid"] == "815ef6d1-3b8f-4a18-b7f8-a88b17fc695a"
-    assert loaded[0]["price"] == 682.94
+    # GRU -> FOR, 2,355 km.
+    assert loaded[0]["price"] == 1061.48
     assert dated[0] == {
         "uuid": "815ef6d1-3b8f-4a18-b7f8-a88b17fc695a",
         "departure_date": "2027-01-11",
         "arrival_date": "2027-01-11",
     }
+    # 0004 sets the same price, for a database loaded with the old ones.
+    assert priced[0] == {
+        "uuid": "815ef6d1-3b8f-4a18-b7f8-a88b17fc695a",
+        "price": 1061.48,
+    }
     assert driver.recorded() == [migration.id for migration in MIGRATIONS]
+
+
+# --- 0004: prices from distance.
+
+airport_by_code = {
+    airport.code: airport for airport in read_airports(CSV_DIR / "aeroportos.csv")
+}
+
+
+def test_distance_is_the_great_circle_distance() -> None:
+    # GRU -> JFK is about 7,660 km.
+    km = distance_km(airport_by_code["GRU"], airport_by_code["JFK"])
+
+    assert 7_600 < km < 7_720
+
+
+@pytest.mark.parametrize(
+    ("km", "price"),
+    [
+        (0, 180),
+        (1_000, 180 + 550),
+        (5_000, 180 + 550 + 1_200),
+        (10_000, 180 + 550 + 1_200 + 1_400),
+    ],
+)
+def test_base_price_falls_per_km_with_distance(km: float, price: float) -> None:
+    assert base_price(km) == pytest.approx(price)
+
+
+def test_variation_is_stable_and_within_20_percent() -> None:
+    flights = read_flights(CSV_DIR / "voos.csv")
+    factors = [variation(flight.uuid) for flight in flights]
+
+    assert all(0.8 <= factor <= 1.2 for factor in factors)
+    assert factors == [variation(flight.uuid) for flight in flights]
+    # Spread across the range, not bunched at one end.
+    assert min(factors) < 0.85
+    assert max(factors) > 1.15
+
+
+def test_every_seed_flight_gets_a_realistic_price() -> None:
+    for flight in read_flights(CSV_DIR / "voos.csv"):
+        origin = airport_by_code[flight.origin]
+        destination = airport_by_code[flight.destination]
+        price = realistic_price(origin, destination, flight.uuid)
+        base = base_price(distance_km(origin, destination))
+
+        assert 0.8 * base - 0.01 <= price <= 1.2 * base + 0.01
+        assert price == round(price, 2)
+
+
+def test_seed_csv_holds_the_migrated_prices() -> None:
+    # A fresh database loads voos.csv in 0002; it must end up exactly where
+    # 0004 takes an existing one.
+    for flight in read_flights(CSV_DIR / "voos.csv"):
+        assert flight.price == realistic_price(
+            airport_by_code[flight.origin],
+            airport_by_code[flight.destination],
+            flight.uuid,
+        )
 
 
 async def test_startup_runs_migrations(monkeypatch: pytest.MonkeyPatch) -> None:

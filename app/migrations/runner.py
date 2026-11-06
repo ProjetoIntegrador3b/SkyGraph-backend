@@ -7,6 +7,7 @@ from app.migrations import (
     m0001_constraints,
     m0002_airports_and_flights,
     m0003_flight_dates,
+    m0004_realistic_prices,
 )
 from app.migrations.base import Migration
 
@@ -15,6 +16,7 @@ MIGRATIONS: list[Migration] = [
     m0001_constraints.migration,
     m0002_airports_and_flights.migration,
     m0003_flight_dates.migration,
+    m0004_realistic_prices.migration,
 ]
 
 
